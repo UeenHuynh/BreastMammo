@@ -81,14 +81,72 @@ def make_class_weights_in(y) -> Dict[int, float]:
     # trả về dict int→float
     return {int(c): float(w) for c, w in zip(classes, weights)}
 
-def load_inbreast_data_no_pectoral_removal(
+def _remove_pectoral_muscle(image_2d_float):
+    """
+    Xác định và loại bỏ vùng cơ ngực dựa trên logic từ file main2.py.
+    Sử dụng phương pháp tìm contour lớn nhất.
+    :param image_2d_float: Ảnh nhũ ảnh 2D dạng float numpy array [0, 1].
+    :return: Ảnh đã loại bỏ vùng cơ ngực.
+    """
+    # Để xử lý, cần ảnh dạng uint8
+    image_u8 = (image_2d_float * 255).astype("uint8")
+    
+    # Kiểm tra xem vú nằm bên trái hay phải bằng cách tính tổng pixel
+    # ở hai nửa ảnh. Giả định vú sẽ sáng hơn.
+    height, width = image_u8.shape
+    left_half_sum = np.sum(image_u8[:, :width//2])
+    right_half_sum = np.sum(image_u8[:, width//2:])
+    
+    # Nếu phần bên phải sáng hơn, lật ảnh để vú luôn ở bên trái
+    if right_half_sum > left_half_sum:
+        image_u8 = cv2.flip(image_u8, 1)
+
+    # Sử dụng threshold để tạo ảnh nhị phân
+    _, binary_image = cv2.threshold(image_u8, 20, 255, cv2.THRESH_BINARY)
+    
+    # Tìm các đường viền
+    contours, _ = cv2.findContours(binary_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    if not contours:
+        return image_2d_float # Trả về ảnh gốc nếu không có contour
+
+    # Tìm contour lớn nhất theo diện tích
+    largest_contour = max(contours, key=cv2.contourArea)
+    
+    # Tạo một mask đen và vẽ contour đã tìm được lên đó
+    mask = np.zeros_like(image_u8)
+    cv2.drawContours(mask, [largest_contour], -1, 255, -1)
+    
+    # Áp dụng các phép toán hình thái để làm mịn mask
+    kernel = np.ones((15, 15), np.uint8)
+    mask = cv2.erode(mask, kernel, iterations=1)
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    # Áp dụng mask lên ảnh gốc
+    final_image_u8 = cv2.bitwise_and(image_u8, mask)
+    
+    # Nếu ảnh đã bị lật, lật lại về vị trí ban đầu
+    if right_half_sum > left_half_sum:
+        final_image_u8 = cv2.flip(final_image_u8, 1)
+        
+    # Chuyển ảnh kết quả về lại dạng float [0, 1]
+    final_image_float = final_image_u8.astype(np.float32) / 255.0
+    
+    return final_image_float
+# =================================================================
+# HÀM LOAD DỮ LIỆU INBREAST HOÀN CHỈNH
+# =================================================================
+def load_inbreast_data_with_preprocessing(
     data_dir: str,
-    label_encoder: LabelEncoder, # Sẽ được fit ở main.py sau khi có tất cả label text
+    label_encoder: LabelEncoder,
     use_roi_patches: bool,
     target_size: tuple
-    # Bỏ các tham số enable_elastic, mixup, cutmix khỏi hàm này
 ):
-    print(f"\n[INFO] Simplified Loading INbreast data (No Pectoral Removal) {'with ROI patches' if use_roi_patches else 'as full images'}...")
+    """
+    Tải dữ liệu INbreast, thực hiện cắt cơ ngực, CLAHE, và cắt ROI theo polygon.
+    """
+    print(f"\n[INFO] Loading INbreast data (WITH Pectoral Muscle Removal & Polygon ROI)...")
+    print(f"  Mode: {'ROI (Polygon Mask)' if use_roi_patches else 'Full Image'}")
     print(f"  Target Size: {target_size}")
 
     dicom_dir = os.path.join(data_dir, "AllDICOMs")
@@ -98,7 +156,7 @@ def load_inbreast_data_no_pectoral_removal(
     if not os.path.exists(csv_path): raise FileNotFoundError(f"INbreast.csv not found at {csv_path}")
     if not os.path.isdir(dicom_dir): raise NotADirectoryError(f"DICOM directory not found: {dicom_dir}")
     if use_roi_patches and (not os.path.isdir(roi_dir) or not os.listdir(roi_dir)):
-        print(f"[WARNING load_inbreast] ROI directory '{roi_dir}' not found or empty. Falling back to full image mode.")
+        print(f"[CẢNH BÁO] Thư mục ROI '{roi_dir}' không tồn tại hoặc rỗng. Chuyển sang chế độ ảnh đầy đủ.")
         use_roi_patches = False
 
     df = pd.read_csv(csv_path, sep=';')
@@ -109,9 +167,8 @@ def load_inbreast_data_no_pectoral_removal(
         patient_id_from_csv = file_name_csv.split('_')[0]
         birad_map[patient_id_from_csv] = str(row['Bi-Rads']).strip()
 
-    all_images_data_accumulator = [] # List chứa các ảnh NumPy đã xử lý
-    all_labels_text_accumulator = [] # List chứa các nhãn text ("Benign", "Malignant")
-
+    all_images_data_accumulator = []
+    all_labels_text_accumulator = []
     processed_dicom_count = 0
 
     for index, row in df.iterrows():
@@ -122,13 +179,8 @@ def load_inbreast_data_no_pectoral_removal(
         found_dicom_files = tf.io.gfile.glob(os.path.join(dicom_dir, patient_id_key + "*.dcm"))
         if found_dicom_files:
             dicom_path = found_dicom_files[0]
-        else:
-            direct_dicom_path = os.path.join(dicom_dir, file_id_csv + ".dcm")
-            if os.path.exists(direct_dicom_path):
-                dicom_path = direct_dicom_path
         
         if not dicom_path:
-            if config.verbose_mode: print(f"  [DEBUG DICOM Find] No DICOM found for CSV File Name/Patient ID: {file_id_csv}/{patient_id_key}")
             continue
 
         birad_value_csv = birad_map.get(patient_id_key)
@@ -146,172 +198,318 @@ def load_inbreast_data_no_pectoral_removal(
         
         try:
             dicom_data = pydicom.dcmread(dicom_path)
-            image_array_original_unnormalized = dicom_data.pixel_array.astype(np.float32)
+            image_array_original = dicom_data.pixel_array.astype(np.float32)
             
-            single_gray_frame_2d = None
-            # (Logic trích xuất single_gray_frame_2d từ image_array_original_unnormalized như phiên bản trước)
-            if image_array_original_unnormalized.ndim == 2:
-                single_gray_frame_2d = image_array_original_unnormalized
-            elif image_array_original_unnormalized.ndim == 3:
-                if image_array_original_unnormalized.shape[-1] == 3: # (H, W, 3) Color
-                    temp_for_cvt = image_array_original_unnormalized
-                    single_gray_frame_2d = cv2.cvtColor(temp_for_cvt, cv2.COLOR_RGB2GRAY)
-                elif image_array_original_unnormalized.shape[-1] == 1: # (H, W, 1) Grayscale with channel
-                    single_gray_frame_2d = image_array_original_unnormalized.squeeze(axis=-1)
-                elif hasattr(dicom_data, 'NumberOfFrames') and dicom_data.NumberOfFrames > 1 and image_array_original_unnormalized.shape[0] == dicom_data.NumberOfFrames: # (Frames, H, W) Grayscale multi-frame
-                    single_gray_frame_2d = image_array_original_unnormalized[0]
-                else: # Ambiguous 3D, try first slice
-                    single_gray_frame_2d = image_array_original_unnormalized[0] # Cần cẩn thận với giả định này
-            elif image_array_original_unnormalized.ndim == 4: # (Frames, H, W, C)
-                if hasattr(dicom_data, 'NumberOfFrames') and dicom_data.NumberOfFrames > 1 and image_array_original_unnormalized.shape[0] == dicom_data.NumberOfFrames:
-                    first_frame = image_array_original_unnormalized[0] # (H,W,C)
-                    if first_frame.shape[-1] == 3: # Color frame
-                        temp_for_cvt_4d = first_frame
-                        single_gray_frame_2d = cv2.cvtColor(temp_for_cvt_4d, cv2.COLOR_RGB2GRAY)
-                    elif first_frame.shape[-1] == 1: # Grayscale frame (H,W,1)
-                        single_gray_frame_2d = first_frame.squeeze(axis=-1)
-                    else: 
-                        if config.verbose_mode: print(f"    [ERROR DICOM Frame] Unhandled 4D frame channel for {dicom_path}. Skipping.")
-                        continue
-                else: 
-                    if config.verbose_mode: print(f"    [ERROR DICOM Frame] Ambiguous 4D shape for {dicom_path}. Skipping.")
-                    continue
-            else: 
-                if config.verbose_mode: print(f"  [ERROR DICOM Frame] Unhandled DICOM ndim {image_array_original_unnormalized.ndim} for {dicom_path}. Skipping.")
-                continue
-
-            if single_gray_frame_2d is None or single_gray_frame_2d.ndim != 2:
-                if config.verbose_mode: print(f"  [CRITICAL ERROR DICOM Frame] Could not get valid 2D frame from {dicom_path}. Shape was {single_gray_frame_2d.shape if single_gray_frame_2d is not None else 'None'}. Skipping.")
-                continue
-            
-            # Chuẩn hóa ảnh xám 2D về [0,1]
-            min_val_norm, max_val_norm = np.min(single_gray_frame_2d), np.max(single_gray_frame_2d)
-            current_image_processed_2d = np.zeros_like(single_gray_frame_2d, dtype=np.float32)
-            if max_val_norm - min_val_norm > 1e-8:
-                current_image_processed_2d = (single_gray_frame_2d - min_val_norm) / (max_val_norm - min_val_norm)
+            # Chuẩn hóa ảnh gốc về [0,1]
+            min_val, max_val = np.min(image_array_original), np.max(image_array_original)
+            if max_val - min_val > 1e-8:
+                current_image_processed_2d = (image_array_original - min_val) / (max_val - min_val)
             else:
-                current_image_processed_2d.fill(np.clip(min_val_norm, 0.0, 1.0))
-            current_image_processed_2d = np.clip(current_image_processed_2d, 0.0, 1.0)
+                current_image_processed_2d = np.zeros_like(image_array_original, dtype=np.float32)
 
-            # --- THÊM BƯỚC CLAHE ---
-            # CLAHE thường hoạt động tốt nhất trên ảnh uint8 (0-255)
-            # Chuyển ảnh float [0,1] sang uint8 [0,255]
-            image_uint8_for_clahe = (current_image_processed_2d * 255).astype(np.uint8)
+            # *** BƯỚC 1: CẮT CƠ NGỰC ***
+            image_pectoral_removed_2d = _remove_pectoral_muscle(current_image_processed_2d)
 
-            # Khởi tạo CLAHE
-            # clipLimit: Ngưỡng giới hạn tương phản. Giá trị cao hơn có thể làm tăng nhiễu.
-            # tileGridSize: Kích thước của các ô (tile) mà histogram equalization được áp dụng cục bộ.
-            clahe_processor = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)) # Bạn có thể thử nghiệm các giá trị này
+            # *** BƯỚC 2: ÁP DỤNG CLAHE ***
+            image_uint8_for_clahe = (image_pectoral_removed_2d * 255).astype(np.uint8)
+            clahe_processor = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
             image_after_clahe_uint8 = clahe_processor.apply(image_uint8_for_clahe)
+            image_final_preprocessed_2d = image_after_clahe_uint8.astype(np.float32) / 255.0
 
-            # Chuyển ảnh đã qua CLAHE trở lại float [0,1] để xử lý tiếp
-            current_image_processed_2d = image_after_clahe_uint8.astype(np.float32) / 255.0
-# -------------------------
-            # min_val, max_val = np.min(final_model_input_image), np.max(final_model_input_image)
-            # if max_val - min_val > 1e-8:
-            #     final_model_input_image = (final_model_input_image - min_val) / (max_val - min_val)
-            # else:
-            #     # Nếu ảnh là hằng số, đặt tất cả pixel thành giá trị hằng số đó (đã được chuẩn hóa)
-            #     # Điều này giả định đầu vào 'final_model_input_image' trước bước này đã được xử lý phần nào.
-            #     # Nếu đó là một ảnh hằng số, chỉ cần đảm bảo nó được cắt trong khoảng [0,1].
-            #     # Một phép gán an toàn nếu các giá trị được mong đợi là đồng nhất và đã được điều chỉnh tỷ lệ:
-            #     final_model_input_image.fill(np.clip(min_val, 0.0, 1.0))
-            # final_model_input_image = np.clip(final_model_input_image, 0.0, 1.0)
-            # images_for_this_entry_raw: chứa các ảnh 2D (đã resize) từ DICOM này
             images_for_this_entry_raw_2d = []
 
             if use_roi_patches:
                 base_name_for_roi = os.path.splitext(os.path.basename(dicom_path))[0]
                 roi_file_pattern = os.path.join(roi_dir, base_name_for_roi + "*.roi")
-                if not tf.io.gfile.glob(roi_file_pattern):
-                    roi_file_pattern = os.path.join(roi_dir, patient_id_key + "*.roi")
-
                 matching_roi_files = tf.io.gfile.glob(roi_file_pattern)
-                if not matching_roi_files:
-                    if config.verbose_mode: print(f"    [DEBUG ROI] No ROI file for {dicom_path}. Skipping this DICOM for ROI.")
-                    continue
+                
+                if not matching_roi_files: continue
 
                 rois_found_for_dicom = 0
                 for roi_path_single in matching_roi_files:
-                    # Sử dụng lại hàm load_roi_and_label
-                    # Cần truyền birad_map được tạo ở đầu hàm này
                     coords_roi, roi_label_text_from_func = load_roi_and_label(roi_path_single, birad_map)
                     
                     if coords_roi is None or not coords_roi or roi_label_text_from_func != current_label_text:
-                        if config.verbose_mode and coords_roi is not None: print(f"      [DEBUG ROI] ROI label mismatch or no coords for {roi_path_single}. Expected {current_label_text}, got {roi_label_text_from_func}.")
                         continue
                     
-                    xs_roi = [p[0] for p in coords_roi]; ys_roi = [p[1] for p in coords_roi]
-                    x_min_r, x_max_r = int(min(xs_roi)), int(max(xs_roi))
-                    y_min_r, y_max_r = int(min(ys_roi)), int(max(ys_roi))
-                    h_img_r, w_img_r = current_image_processed_2d.shape[:2]
-                    x_min_r, y_min_r = max(0, x_min_r), max(0, y_min_r)
-                    x_max_r, y_max_r = min(w_img_r - 1, x_max_r), min(h_img_r - 1, y_max_r)
-
-                    if x_min_r < x_max_r and y_min_r < y_max_r:
-                        roi_patch_from_2d = current_image_processed_2d[y_min_r:y_max_r+1, x_min_r:x_max_r+1]
-                        if roi_patch_from_2d.size > 0:
-                            resized_roi_2d = cv2.resize(roi_patch_from_2d, target_size, interpolation=cv2.INTER_AREA)
-                            images_for_this_entry_raw_2d.append(resized_roi_2d)
-                            rois_found_for_dicom +=1
-                        else:
-                            if config.verbose_mode: print(f"      [WARN ROI] Empty ROI patch for {roi_path_single}. Skipping.")
-                    else:
-                        if config.verbose_mode: print(f"      [WARN ROI] Invalid ROI coordinates for {roi_path_single}. Skipping.")
-                if rois_found_for_dicom == 0 and use_roi_patches: # Nếu bật ROI mà không tìm thấy ROI hợp lệ nào cho DICOM này
-                    if config.verbose_mode: print(f"    [DEBUG ROI] No valid ROIs processed for {dicom_path} though use_roi_patches is True. Skipping this DICOM.")
-                    continue # Bỏ qua DICOM này
-            else: # Full image
-                resized_full_2d = cv2.resize(current_image_processed_2d, target_size, interpolation=cv2.INTER_AREA)
+                    # *** BƯỚC 3: CẮT ROI DẠNG POLYGON ***
+                    roi_mask = np.zeros(image_final_preprocessed_2d.shape[:2], dtype=np.uint8)
+                    polygon_points = np.array(coords_roi, dtype=np.int32)
+                    cv2.fillPoly(roi_mask, [polygon_points], 255)
+                    
+                    image_with_roi_only = cv2.bitwise_and(image_final_preprocessed_2d, image_final_preprocessed_2d, mask=roi_mask)
+                    
+                    x, y, w, h = cv2.boundingRect(polygon_points)
+                    roi_patch = image_with_roi_only[y:y+h, x:x+w]
+                    
+                    if roi_patch.size > 0:
+                        resized_roi_2d = cv2.resize(roi_patch, target_size, interpolation=cv2.INTER_AREA)
+                        images_for_this_entry_raw_2d.append(resized_roi_2d)
+                        rois_found_for_dicom += 1
+                
+                if rois_found_for_dicom == 0: continue
+            else: # Chế độ ảnh đầy đủ
+                resized_full_2d = cv2.resize(image_final_preprocessed_2d, target_size, interpolation=cv2.INTER_AREA)
                 images_for_this_entry_raw_2d.append(resized_full_2d)
 
-            # Xử lý kênh và thêm vào accumulator
             for img_2d_processed in images_for_this_entry_raw_2d:
-                final_model_input_image = None
-                if config.model != "CNN": # Cần 3 kênh
+                # Xử lý kênh cho model
+                if config.model != "CNN":
                     final_model_input_image = cv2.cvtColor(img_2d_processed, cv2.COLOR_GRAY2RGB)
-                else: # CNN cần 1 kênh
+                else:
                     final_model_input_image = np.expand_dims(img_2d_processed, axis=-1)
                 
-                final_model_input_image = final_model_input_image.astype(np.float32)
-                # Chuẩn hóa lại nếu cvtColor làm thay đổi dải giá trị (thường không với float [0,1])
-                min_f, max_f = np.min(final_model_input_image), np.max(final_model_input_image)
-                if max_f - min_f > 1e-8:
-                    final_model_input_image = (final_model_input_image - min_f) / (max_f - min_f)
-                else:
-                    # final_model_input_image = np.zeros_like(final_model_input_image)
-                    final_model_input_image.fill(np.clip(min_f, 0.0, 1.0))
-                final_model_input_image = np.clip(final_model_input_image, 0.0, 1.0)
-                # print(f"    [DEBUG LOAD] Appending image for {dicom_path}. Shape: {final_model_input_image.shape}, Min: {np.min(final_model_input_image):.2f}, Max: {np.max(final_model_input_image):.2f}, Mean: {np.mean(final_model_input_image):.2f}, Label: {current_label_text}")
+                all_images_data_accumulator.append(final_model_input_image.astype(np.float32))
+                all_labels_text_accumulator.append(current_label_text)
+                processed_dicom_count += 1
 
-                all_images_data_accumulator.append(final_model_input_image)
-                all_labels_text_accumulator.append(current_label_text) # Lưu nhãn text
-                processed_dicom_count +=1 # Đếm số ảnh/ROI được xử lý thành công
-
-        except InvalidDicomError:
-            if config.verbose_mode: print(f"  [WARNING] Invalid DICOM file skipped: {dicom_path}")
-            continue
         except Exception as e_outer:
-            print(f"  [ERROR General Loop] Failed to process DICOM entry {file_id_csv} (path: {dicom_path}): {type(e_outer).__name__} - {e_outer}")
-            import traceback
-            traceback.print_exc()
+            print(f"  [LỖI] Xảy ra lỗi khi xử lý file {dicom_path}: {e_outer}")
             continue
             
-    print(f"[INFO] Total raw images/ROIs loaded before augmentation: {processed_dicom_count}")
+    print(f"[INFO] Tổng số ảnh/ROI đã xử lý thành công: {processed_dicom_count}")
     
     if not all_images_data_accumulator:
-        print("[ERROR load_inbreast] Final accumulator is empty. Returning empty arrays.")
-        return np.array([]), np.array([]) # Trả về mảng rỗng cho cả X và y
+        print("[LỖI] Không có ảnh nào được tải. Trả về mảng rỗng.")
+        return np.array([]), np.array([])
 
-    # Chuyển đổi danh sách thành NumPy arrays
     final_images_array = np.array(all_images_data_accumulator, dtype=np.float32)
-    final_labels_text_array = np.array(all_labels_text_accumulator) # Mảng các nhãn text
+    final_labels_text_array = np.array(all_labels_text_accumulator)
 
-    if config.verbose_mode:
-        print(f"[INFO load_inbreast] Returning raw processed arrays: X_shape={final_images_array.shape}, y_text_shape={final_labels_text_array.shape}")
+    print(f"[INFO] Trả về dữ liệu thô đã xử lý: X_shape={final_images_array.shape}, y_text_shape={final_labels_text_array.shape}")
     
-    # Hàm này chỉ trả về ảnh thô và nhãn text. Việc encoding và augmentation sẽ làm ở main.py
     return final_images_array, final_labels_text_array
+# def load_inbreast_data_no_pectoral_removal(
+#     data_dir: str,
+#     label_encoder: LabelEncoder, # Sẽ được fit ở main.py sau khi có tất cả label text
+#     use_roi_patches: bool,
+#     target_size: tuple
+#     # Bỏ các tham số enable_elastic, mixup, cutmix khỏi hàm này
+# ):
+#     print(f"\n[INFO] Simplified Loading INbreast data (No Pectoral Removal) {'with ROI patches' if use_roi_patches else 'as full images'}...")
+#     print(f"  Target Size: {target_size}")
+
+#     dicom_dir = os.path.join(data_dir, "AllDICOMs")
+#     roi_dir = os.path.join(data_dir, "AllROI")
+#     csv_path = os.path.join(data_dir, "INbreast.csv")
+
+#     if not os.path.exists(csv_path): raise FileNotFoundError(f"INbreast.csv not found at {csv_path}")
+#     if not os.path.isdir(dicom_dir): raise NotADirectoryError(f"DICOM directory not found: {dicom_dir}")
+#     if use_roi_patches and (not os.path.isdir(roi_dir) or not os.listdir(roi_dir)):
+#         print(f"[WARNING load_inbreast] ROI directory '{roi_dir}' not found or empty. Falling back to full image mode.")
+#         use_roi_patches = False
+
+#     df = pd.read_csv(csv_path, sep=';')
+#     df.columns = [c.strip() for c in df.columns]
+#     birad_map = {}
+#     for _, row in df.iterrows():
+#         file_name_csv = str(row['File Name']).strip()
+#         patient_id_from_csv = file_name_csv.split('_')[0]
+#         birad_map[patient_id_from_csv] = str(row['Bi-Rads']).strip()
+
+#     all_images_data_accumulator = [] # List chứa các ảnh NumPy đã xử lý
+#     all_labels_text_accumulator = [] # List chứa các nhãn text ("Benign", "Malignant")
+
+#     processed_dicom_count = 0
+
+#     for index, row in df.iterrows():
+#         file_id_csv = str(row['File Name']).strip()
+#         patient_id_key = file_id_csv.split('_')[0]
+
+#         dicom_path = None
+#         found_dicom_files = tf.io.gfile.glob(os.path.join(dicom_dir, patient_id_key + "*.dcm"))
+#         if found_dicom_files:
+#             dicom_path = found_dicom_files[0]
+#         else:
+#             direct_dicom_path = os.path.join(dicom_dir, file_id_csv + ".dcm")
+#             if os.path.exists(direct_dicom_path):
+#                 dicom_path = direct_dicom_path
+        
+#         if not dicom_path:
+#             if config.verbose_mode: print(f"  [DEBUG DICOM Find] No DICOM found for CSV File Name/Patient ID: {file_id_csv}/{patient_id_key}")
+#             continue
+
+#         birad_value_csv = birad_map.get(patient_id_key)
+#         if birad_value_csv is None: continue
+
+#         current_label_text = None
+#         for label_text_map, birad_code_list_map in config.INBREAST_BIRADS_MAPPING.items():
+#             standardized_birad_codes = [val.replace("BI-RADS", "").strip() for val in birad_code_list_map]
+#             if birad_value_csv in standardized_birad_codes:
+#                 current_label_text = label_text_map
+#                 break
+        
+#         if current_label_text is None or current_label_text == "Normal":
+#             continue
+        
+#         try:
+#             dicom_data = pydicom.dcmread(dicom_path)
+#             image_array_original_unnormalized = dicom_data.pixel_array.astype(np.float32)
+            
+#             single_gray_frame_2d = None
+#             # (Logic trích xuất single_gray_frame_2d từ image_array_original_unnormalized như phiên bản trước)
+#             if image_array_original_unnormalized.ndim == 2:
+#                 single_gray_frame_2d = image_array_original_unnormalized
+#             elif image_array_original_unnormalized.ndim == 3:
+#                 if image_array_original_unnormalized.shape[-1] == 3: # (H, W, 3) Color
+#                     temp_for_cvt = image_array_original_unnormalized
+#                     single_gray_frame_2d = cv2.cvtColor(temp_for_cvt, cv2.COLOR_RGB2GRAY)
+#                 elif image_array_original_unnormalized.shape[-1] == 1: # (H, W, 1) Grayscale with channel
+#                     single_gray_frame_2d = image_array_original_unnormalized.squeeze(axis=-1)
+#                 elif hasattr(dicom_data, 'NumberOfFrames') and dicom_data.NumberOfFrames > 1 and image_array_original_unnormalized.shape[0] == dicom_data.NumberOfFrames: # (Frames, H, W) Grayscale multi-frame
+#                     single_gray_frame_2d = image_array_original_unnormalized[0]
+#                 else: # Ambiguous 3D, try first slice
+#                     single_gray_frame_2d = image_array_original_unnormalized[0] # Cần cẩn thận với giả định này
+#             elif image_array_original_unnormalized.ndim == 4: # (Frames, H, W, C)
+#                 if hasattr(dicom_data, 'NumberOfFrames') and dicom_data.NumberOfFrames > 1 and image_array_original_unnormalized.shape[0] == dicom_data.NumberOfFrames:
+#                     first_frame = image_array_original_unnormalized[0] # (H,W,C)
+#                     if first_frame.shape[-1] == 3: # Color frame
+#                         temp_for_cvt_4d = first_frame
+#                         single_gray_frame_2d = cv2.cvtColor(temp_for_cvt_4d, cv2.COLOR_RGB2GRAY)
+#                     elif first_frame.shape[-1] == 1: # Grayscale frame (H,W,1)
+#                         single_gray_frame_2d = first_frame.squeeze(axis=-1)
+#                     else: 
+#                         if config.verbose_mode: print(f"    [ERROR DICOM Frame] Unhandled 4D frame channel for {dicom_path}. Skipping.")
+#                         continue
+#                 else: 
+#                     if config.verbose_mode: print(f"    [ERROR DICOM Frame] Ambiguous 4D shape for {dicom_path}. Skipping.")
+#                     continue
+#             else: 
+#                 if config.verbose_mode: print(f"  [ERROR DICOM Frame] Unhandled DICOM ndim {image_array_original_unnormalized.ndim} for {dicom_path}. Skipping.")
+#                 continue
+
+#             if single_gray_frame_2d is None or single_gray_frame_2d.ndim != 2:
+#                 if config.verbose_mode: print(f"  [CRITICAL ERROR DICOM Frame] Could not get valid 2D frame from {dicom_path}. Shape was {single_gray_frame_2d.shape if single_gray_frame_2d is not None else 'None'}. Skipping.")
+#                 continue
+            
+#             # Chuẩn hóa ảnh xám 2D về [0,1]
+#             min_val_norm, max_val_norm = np.min(single_gray_frame_2d), np.max(single_gray_frame_2d)
+#             current_image_processed_2d = np.zeros_like(single_gray_frame_2d, dtype=np.float32)
+#             if max_val_norm - min_val_norm > 1e-8:
+#                 current_image_processed_2d = (single_gray_frame_2d - min_val_norm) / (max_val_norm - min_val_norm)
+#             else:
+#                 current_image_processed_2d.fill(np.clip(min_val_norm, 0.0, 1.0))
+#             current_image_processed_2d = np.clip(current_image_processed_2d, 0.0, 1.0)
+
+#             # --- THÊM BƯỚC CLAHE ---
+#             # CLAHE thường hoạt động tốt nhất trên ảnh uint8 (0-255)
+#             # Chuyển ảnh float [0,1] sang uint8 [0,255]
+#             image_uint8_for_clahe = (current_image_processed_2d * 255).astype(np.uint8)
+
+#             # Khởi tạo CLAHE
+#             # clipLimit: Ngưỡng giới hạn tương phản. Giá trị cao hơn có thể làm tăng nhiễu.
+#             # tileGridSize: Kích thước của các ô (tile) mà histogram equalization được áp dụng cục bộ.
+#             clahe_processor = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)) # Bạn có thể thử nghiệm các giá trị này
+#             image_after_clahe_uint8 = clahe_processor.apply(image_uint8_for_clahe)
+
+#             # Chuyển ảnh đã qua CLAHE trở lại float [0,1] để xử lý tiếp
+#             current_image_processed_2d = image_after_clahe_uint8.astype(np.float32) / 255.0
+# # -------------------------
+#             # min_val, max_val = np.min(final_model_input_image), np.max(final_model_input_image)
+#             # if max_val - min_val > 1e-8:
+#             #     final_model_input_image = (final_model_input_image - min_val) / (max_val - min_val)
+#             # else:
+#             #     # Nếu ảnh là hằng số, đặt tất cả pixel thành giá trị hằng số đó (đã được chuẩn hóa)
+#             #     # Điều này giả định đầu vào 'final_model_input_image' trước bước này đã được xử lý phần nào.
+#             #     # Nếu đó là một ảnh hằng số, chỉ cần đảm bảo nó được cắt trong khoảng [0,1].
+#             #     # Một phép gán an toàn nếu các giá trị được mong đợi là đồng nhất và đã được điều chỉnh tỷ lệ:
+#             #     final_model_input_image.fill(np.clip(min_val, 0.0, 1.0))
+#             # final_model_input_image = np.clip(final_model_input_image, 0.0, 1.0)
+#             # images_for_this_entry_raw: chứa các ảnh 2D (đã resize) từ DICOM này
+#             images_for_this_entry_raw_2d = []
+
+#             if use_roi_patches:
+#                 base_name_for_roi = os.path.splitext(os.path.basename(dicom_path))[0]
+#                 roi_file_pattern = os.path.join(roi_dir, base_name_for_roi + "*.roi")
+#                 if not tf.io.gfile.glob(roi_file_pattern):
+#                     roi_file_pattern = os.path.join(roi_dir, patient_id_key + "*.roi")
+
+#                 matching_roi_files = tf.io.gfile.glob(roi_file_pattern)
+#                 if not matching_roi_files:
+#                     if config.verbose_mode: print(f"    [DEBUG ROI] No ROI file for {dicom_path}. Skipping this DICOM for ROI.")
+#                     continue
+
+#                 rois_found_for_dicom = 0
+#                 for roi_path_single in matching_roi_files:
+#                     # Sử dụng lại hàm load_roi_and_label
+#                     # Cần truyền birad_map được tạo ở đầu hàm này
+#                     coords_roi, roi_label_text_from_func = load_roi_and_label(roi_path_single, birad_map)
+                    
+#                     if coords_roi is None or not coords_roi or roi_label_text_from_func != current_label_text:
+#                         if config.verbose_mode and coords_roi is not None: print(f"      [DEBUG ROI] ROI label mismatch or no coords for {roi_path_single}. Expected {current_label_text}, got {roi_label_text_from_func}.")
+#                         continue
+                    
+#                     xs_roi = [p[0] for p in coords_roi]; ys_roi = [p[1] for p in coords_roi]
+#                     x_min_r, x_max_r = int(min(xs_roi)), int(max(xs_roi))
+#                     y_min_r, y_max_r = int(min(ys_roi)), int(max(ys_roi))
+#                     h_img_r, w_img_r = current_image_processed_2d.shape[:2]
+#                     x_min_r, y_min_r = max(0, x_min_r), max(0, y_min_r)
+#                     x_max_r, y_max_r = min(w_img_r - 1, x_max_r), min(h_img_r - 1, y_max_r)
+
+#                     if x_min_r < x_max_r and y_min_r < y_max_r:
+#                         roi_patch_from_2d = current_image_processed_2d[y_min_r:y_max_r+1, x_min_r:x_max_r+1]
+#                         if roi_patch_from_2d.size > 0:
+#                             resized_roi_2d = cv2.resize(roi_patch_from_2d, target_size, interpolation=cv2.INTER_AREA)
+#                             images_for_this_entry_raw_2d.append(resized_roi_2d)
+#                             rois_found_for_dicom +=1
+#                         else:
+#                             if config.verbose_mode: print(f"      [WARN ROI] Empty ROI patch for {roi_path_single}. Skipping.")
+#                     else:
+#                         if config.verbose_mode: print(f"      [WARN ROI] Invalid ROI coordinates for {roi_path_single}. Skipping.")
+#                 if rois_found_for_dicom == 0 and use_roi_patches: # Nếu bật ROI mà không tìm thấy ROI hợp lệ nào cho DICOM này
+#                     if config.verbose_mode: print(f"    [DEBUG ROI] No valid ROIs processed for {dicom_path} though use_roi_patches is True. Skipping this DICOM.")
+#                     continue # Bỏ qua DICOM này
+#             else: # Full image
+#                 resized_full_2d = cv2.resize(current_image_processed_2d, target_size, interpolation=cv2.INTER_AREA)
+#                 images_for_this_entry_raw_2d.append(resized_full_2d)
+
+#             # Xử lý kênh và thêm vào accumulator
+#             for img_2d_processed in images_for_this_entry_raw_2d:
+#                 final_model_input_image = None
+#                 if config.model != "CNN": # Cần 3 kênh
+#                     final_model_input_image = cv2.cvtColor(img_2d_processed, cv2.COLOR_GRAY2RGB)
+#                 else: # CNN cần 1 kênh
+#                     final_model_input_image = np.expand_dims(img_2d_processed, axis=-1)
+                
+#                 final_model_input_image = final_model_input_image.astype(np.float32)
+#                 # Chuẩn hóa lại nếu cvtColor làm thay đổi dải giá trị (thường không với float [0,1])
+#                 min_f, max_f = np.min(final_model_input_image), np.max(final_model_input_image)
+#                 if max_f - min_f > 1e-8:
+#                     final_model_input_image = (final_model_input_image - min_f) / (max_f - min_f)
+#                 else:
+#                     # final_model_input_image = np.zeros_like(final_model_input_image)
+#                     final_model_input_image.fill(np.clip(min_f, 0.0, 1.0))
+#                 final_model_input_image = np.clip(final_model_input_image, 0.0, 1.0)
+#                 # print(f"    [DEBUG LOAD] Appending image for {dicom_path}. Shape: {final_model_input_image.shape}, Min: {np.min(final_model_input_image):.2f}, Max: {np.max(final_model_input_image):.2f}, Mean: {np.mean(final_model_input_image):.2f}, Label: {current_label_text}")
+
+#                 all_images_data_accumulator.append(final_model_input_image)
+#                 all_labels_text_accumulator.append(current_label_text) # Lưu nhãn text
+#                 processed_dicom_count +=1 # Đếm số ảnh/ROI được xử lý thành công
+
+#         except InvalidDicomError:
+#             if config.verbose_mode: print(f"  [WARNING] Invalid DICOM file skipped: {dicom_path}")
+#             continue
+#         except Exception as e_outer:
+#             print(f"  [ERROR General Loop] Failed to process DICOM entry {file_id_csv} (path: {dicom_path}): {type(e_outer).__name__} - {e_outer}")
+#             import traceback
+#             traceback.print_exc()
+#             continue
+            
+#     print(f"[INFO] Total raw images/ROIs loaded before augmentation: {processed_dicom_count}")
+    
+#     if not all_images_data_accumulator:
+#         print("[ERROR load_inbreast] Final accumulator is empty. Returning empty arrays.")
+#         return np.array([]), np.array([]) # Trả về mảng rỗng cho cả X và y
+
+#     # Chuyển đổi danh sách thành NumPy arrays
+#     final_images_array = np.array(all_images_data_accumulator, dtype=np.float32)
+#     final_labels_text_array = np.array(all_labels_text_accumulator) # Mảng các nhãn text
+
+#     if config.verbose_mode:
+#         print(f"[INFO load_inbreast] Returning raw processed arrays: X_shape={final_images_array.shape}, y_text_shape={final_labels_text_array.shape}")
+    
+#     # Hàm này chỉ trả về ảnh thô và nhãn text. Việc encoding và augmentation sẽ làm ở main.py
+#     return final_images_array, final_labels_text_array
 
 def import_minimias_dataset(data_dir: str, label_encoder) -> (np.ndarray, np.ndarray):
     """

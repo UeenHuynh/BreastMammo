@@ -302,65 +302,98 @@ def main_logic(cli_args):
         print(f"Tập Validation: {X_val.shape[0]} mẫu - Phân phối: {Counter(y_val)}")
         print(f"Tập Test      : {X_test.shape[0]} mẫu - Phân phối: {Counter(y_test)}")
 
-        # 3. CÂN BẰNG TẬP TRAIN (SMOTE HOẶC CLASS WEIGHTS)
-        # -----------------------------------------------------------------
-        if config.APPLY_SMOTE:
-            print("\n[INFO] Áp dụng SMOTE trên tập train của INbreast...")
-            original_shape = X_train.shape
-            X_train_reshaped = X_train.reshape(original_shape[0], -1)
-            smote = SMOTE(random_state=config.RANDOM_SEED)
-            X_train_resampled, y_train_resampled = smote.fit_resample(X_train_reshaped, y_train)
-            X_train = X_train_resampled.reshape(-1, original_shape[1], original_shape[2], original_shape[3])
-            y_train = y_train_resampled
-            class_weights = None
-            print(f"Phân phối lớp sau SMOTE: {Counter(y_train)}")
-        else:
-            print("\n[INFO] SMOTE không được bật. Tính toán Class Weights cho INbreast...")
-            # class_labels = np.unique(y_train)
-            # weights = make_class_weights('balanced', classes=class_labels, y=y_train)
-            # class_weights = dict(zip(class_labels, weights))
-            class_weights = make_class_weights(y_train) 
-            print(f"Class Weights đã tính: {class_weights}")
+        # # 3. CÂN BẰNG TẬP TRAIN (SMOTE HOẶC CLASS WEIGHTS)
+        # # -----------------------------------------------------------------
+        # if config.APPLY_SMOTE:
+        #     print("\n[INFO] Áp dụng SMOTE trên tập train của INbreast...")
+        #     original_shape = X_train.shape
+        #     X_train_reshaped = X_train.reshape(original_shape[0], -1)
+        #     smote = SMOTE(random_state=config.RANDOM_SEED)
+        #     X_train_resampled, y_train_resampled = smote.fit_resample(X_train_reshaped, y_train)
+        #     X_train = X_train_resampled.reshape(-1, original_shape[1], original_shape[2], original_shape[3])
+        #     y_train = y_train_resampled
+        #     class_weights = None
+        #     print(f"Phân phối lớp sau SMOTE: {Counter(y_train)}")
+        # else:
+        #     print("\n[INFO] SMOTE không được bật. Tính toán Class Weights cho INbreast...")
+        #     # class_labels = np.unique(y_train)
+        #     # weights = make_class_weights('balanced', classes=class_labels, y=y_train)
+        #     # class_weights = dict(zip(class_labels, weights))
+        #     class_weights = make_class_weights(y_train) 
+        #     print(f"Class Weights đã tính: {class_weights}")
 
-        # 4. AUGMENTATION (Tăng cường dữ liệu)
-        # -----------------------------------------------------------------
-        # Gán lại X_train_np, y_train_np để tương thích với code huấn luyện
-        X_train_np, y_train_np = X_train, y_train 
-        X_val_np, y_val_np = X_val, y_val
-        X_test_np, y_test_np = X_test, y_test
+        # # 4. AUGMENTATION (Tăng cường dữ liệu)
+        # # -----------------------------------------------------------------
+        # # Gán lại X_train_np, y_train_np để tương thích với code huấn luyện
+        # X_train_np, y_train_np = X_train, y_train 
+        # X_val_np, y_val_np = X_val, y_val
+        # X_test_np, y_test_np = X_test, y_test
         
-        # Chuyển nhãn sang one-hot để tương thích với hàm generate_image_transforms
+        # # Chuyển nhãn sang one-hot để tương thích với hàm generate_image_transforms
+        # y_train_np_encoded = to_categorical(y_train_np, num_classes=num_classes)
+        
+        # if config.augment_data:
+        #     print("\n[INFO] Áp dụng các phép augmentation hình học cho INbreast...")
+        #     X_train_np, y_train_np_encoded = generate_image_transforms(
+        #         X_train_np, y_train_np_encoded,
+        #         apply_elastic=cli_args.apply_elastic, elastic_alpha=cli_args.elastic_alpha, elastic_sigma=cli_args.elastic_sigma,
+        #         apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
+        #         apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha
+        #     )
+        #     print(f"Shape tập train sau augmentation: {X_train_np.shape}")
+        #     if cli_args.apply_mixup or cli_args.apply_cutmix:
+        #         print("[INFO] MixUp/CutMix đã được áp dụng, class_weights sẽ được bỏ qua.")
+        #         class_weights = None
+        # --- BƯỚC 3 & 4: CÂN BẰNG VÀ AUGMENTATION (LOGIC MỚI) ---
         y_train_np_encoded = to_categorical(y_train_np, num_classes=num_classes)
         
-        if config.augment_data:
-            print("\n[INFO] Áp dụng các phép augmentation hình học cho INbreast...")
-            X_train_np, y_train_np_encoded = generate_image_transforms(
+        # Quyết định chiến lược dựa trên cờ --apply_oversampling
+        if cli_args.apply_oversampling:
+            print("\n[INFO] Chiến lược: Oversampling qua Augmentation.")
+            class_weights = None # Vô hiệu hóa class weights
+            
+            # Gọi generate_image_transforms với oversample=True
+            X_train_np, y_train_np = generate_image_transforms(
                 X_train_np, y_train_np_encoded,
-                apply_elastic=cli_args.apply_elastic, elastic_alpha=cli_args.elastic_alpha, elastic_sigma=cli_args.elastic_sigma,
-                apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
-                apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha
+                apply_elastic=cli_args.apply_elastic, #... các tham số khác
+                oversample=True
             )
-            print(f"Shape tập train sau augmentation: {X_train_np.shape}")
-            if cli_args.apply_mixup or cli_args.apply_cutmix:
-                print("[INFO] MixUp/CutMix đã được áp dụng, class_weights sẽ được bỏ qua.")
-                class_weights = None
-        
-        # 5. CHUẨN BỊ DỮ LIỆU CUỐI CÙNG
-        # -----------------------------------------------------------------
-        # Cập nhật lại y_train_np từ kết quả augmentation (nếu có)
-        # Hoặc từ one-hot encoding (nếu không có aug)
-        y_train_np = y_train_np_encoded
-        # Chuyển các tập val và test sang one-hot
-        y_val_np = to_categorical(y_val_np, num_classes=num_classes)
-        y_test_np = to_categorical(y_test_np, num_classes=num_classes)
+            print(f"Shape tập train sau oversampling: {X_train_np.shape}")
+            
+        else: # Trường hợp không oversampling
+            print("\n[INFO] Chiến lược: Class Weights và Augmentation cơ bản.")
+            
+            # Tính class weights trên tập train gốc (chưa cân bằng)
+            class_weights = make_class_weights(y_train_np) 
+            print(f"Class Weights đã tính: {class_weights}")
+            
+            # Nếu có bật các cờ aug khác, gọi generate_image_transforms để chỉ biến đổi hình học
+            if config.augment_data:
+                X_train_np, y_train_np = generate_image_transforms(
+                    X_train_np, y_train_np_encoded,
+                    apply_elastic=cli_args.apply_elastic, #... các tham số khác
+                    oversample=False
+                )
+                print(f"Shape tập train sau augmentation cơ bản: {X_train_np.shape}")
+            else:
+                # Nếu không augment gì cả, gán y_train_np bằng phiên bản one-hot
+                y_train_np = y_train_np_encoded        
+            # 5. CHUẨN BỊ DỮ LIỆU CUỐI CÙNG
+            # -----------------------------------------------------------------
+            # Cập nhật lại y_train_np từ kết quả augmentation (nếu có)
+            # Hoặc từ one-hot encoding (nếu không có aug)
+            y_train_np = y_train_np_encoded
+            # Chuyển các tập val và test sang one-hot
+            y_val_np = to_categorical(y_val_np, num_classes=num_classes)
+            y_test_np = to_categorical(y_test_np, num_classes=num_classes)
 
-        # Đảm bảo kiểu dữ liệu là float32
-        X_train_np = X_train_np.astype(np.float32)
-        y_train_np = y_train_np.astype(np.float32)
-        X_val_np = X_val_np.astype(np.float32)
-        y_val_np = y_val_np.astype(np.float32)
-        X_test_np = X_test_np.astype(np.float32)
-        y_test_np = y_test_np.astype(np.float32)
+            # Đảm bảo kiểu dữ liệu là float32
+            X_train_np = X_train_np.astype(np.float32)
+            y_train_np = y_train_np.astype(np.float32)
+            X_val_np = X_val_np.astype(np.float32)
+            y_val_np = y_val_np.astype(np.float32)
+            X_test_np = X_test_np.astype(np.float32)
+            y_test_np = y_test_np.astype(np.float32)
 
     # --- Xử lý cho mini-MIAS ---
     elif config.dataset.upper() in ["MINI-MIAS", "MINI-MIAS-BINARY"]:
@@ -697,7 +730,10 @@ if __name__ == "__main__":
                         type=float, 
                         default=1.0,  # Giá trị mặc định (1.0 nghĩa là không boost)
                         help="Factor to manually boost the weight of the Malignant class for INbreast (e.g., 2.0). Active if SMOTE is off or boost > 1.0.")
-
+    parser.add_argument("--apply_oversampling", 
+                        action="store_true",
+                        default=False,
+                        help="Enable oversampling via augmentation to balance classes. If enabled, class_weights will be ignored.")
     parser.add_argument("--verbose_logging", action="store_true", default=config.verbose_mode, help="Verbose logging.")
     parser.add_argument("-n", "--name", default=config.name, help="Experiment name.")
     # Added mammogram_type for datasets other than INbreast, though INbreast sets it to "all"
