@@ -164,7 +164,7 @@ class CnnModel:
                     layer.trainable = True
 
                 # learning rate thấp để fine-tune
-                self.compile_model(1e-5)
+                self.compile_model(5e-5)
                 self._fit(X_train, X_val, y_train, y_val,
                           class_weights,
                           epochs=config.max_epoch_unfrozen,
