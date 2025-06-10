@@ -610,82 +610,113 @@ def main_logic(cli_args):
     # else:
     #     print(f"[ERROR main_logic] Dataset '{config.dataset}' not supported in this simplified flow. Exiting.")
     #     return
+    # elif config.dataset.upper() == "CMMD":
+    #     # Assuming import_cmmd_dataset returns X, y (scalar labels)
+    #     # And current_data_dir points to CMMD root.
+    #     X_np, y_scalar_labels = import_cmmd_dataset(current_data_dir, le) # Pass le
+    #     if X_np.size == 0: print("[ERROR] No CMMD data loaded. Exiting."); return
+
+    #     num_classes = len(np.unique(y_scalar_labels))
+    #     if num_classes == 1: num_classes = 2
+    #     if num_classes != len(le.classes_):
+    #          print(f"[INFO] Updated num_classes for CMMD from loaded data to: {num_classes} (LE initially had {len(le.classes_)})")
+        
+    #     y_np = tf.keras.utils.to_categorical(y_scalar_labels, num_classes=num_classes)
+        
+    #     # Data splitting
+    #     y_stratify = y_scalar_labels
+    #     unique_labels_stratify = np.unique(y_stratify)
+    #     stratify_param = y_stratify if len(unique_labels_stratify) >= 2 else None
+        
+    #     X_train_val, X_test_np, y_train_val, y_test_np = train_test_split(
+    #         X_np, y_np, test_size=0.2, stratify=stratify_param, random_state=config.RANDOM_SEED, shuffle=True
+    #     )
+        
+    #     y_train_val_stratify_inner = np.argmax(y_train_val, axis=1) if y_train_val.ndim > 1 and y_train_val.shape[1] > 1 else y_train_val
+    #     unique_labels_stratify_inner = np.unique(y_train_val_stratify_inner)
+    #     stratify_param_inner = y_train_val_stratify_inner if len(unique_labels_stratify_inner) >=2 else None
+
+    #     X_train_np, X_val_np, y_train_np, y_val_np = train_test_split(
+    #         X_train_val, y_train_val, test_size=0.25, stratify=stratify_param_inner, random_state=config.RANDOM_SEED, shuffle=True
+    #     )
     elif config.dataset.upper() == "CMMD":
-        # Assuming import_cmmd_dataset returns X, y (scalar labels)
-        # And current_data_dir points to CMMD root.
-        X_np, y_scalar_labels = import_cmmd_dataset(current_data_dir, le) # Pass le
-        if X_np.size == 0: print("[ERROR] No CMMD data loaded. Exiting."); return
+        print("[INFO] Bắt đầu quy trình xử lý chuẩn hóa cho bộ dữ liệu CMMD...")
 
-        num_classes = len(np.unique(y_scalar_labels))
-        if num_classes == 1: num_classes = 2
-        if num_classes != len(le.classes_):
-             print(f"[INFO] Updated num_classes for CMMD from loaded data to: {num_classes} (LE initially had {len(le.classes_)})")
-        
-        y_np = tf.keras.utils.to_categorical(y_scalar_labels, num_classes=num_classes)
-        
-        # Data splitting
-        y_stratify = y_scalar_labels
-        unique_labels_stratify = np.unique(y_stratify)
-        stratify_param = y_stratify if len(unique_labels_stratify) >= 2 else None
-        
-        X_train_val, X_test_np, y_train_val, y_test_np = train_test_split(
-            X_np, y_np, test_size=0.2, stratify=stratify_param, random_state=config.RANDOM_SEED, shuffle=True
-        )
-        
-        y_train_val_stratify_inner = np.argmax(y_train_val, axis=1) if y_train_val.ndim > 1 and y_train_val.shape[1] > 1 else y_train_val
-        unique_labels_stratify_inner = np.unique(y_train_val_stratify_inner)
-        stratify_param_inner = y_train_val_stratify_inner if len(unique_labels_stratify_inner) >=2 else None
-
-        X_train_np, X_val_np, y_train_np, y_val_np = train_test_split(
-            X_train_val, y_train_val, test_size=0.25, stratify=stratify_param_inner, random_state=config.RANDOM_SEED, shuffle=True
-        )
-        # if config.augment_data:
-        #     print(f"\n[INFO main_logic] Applying data augmentation to {config.dataset} training set...")
-        #     X_train_np, y_train_np_encoded = generate_image_transforms(
-        #         X_train_np, y_train_np_encoded,
-        #         apply_elastic=cli_args.apply_elastic, elastic_alpha=cli_args.elastic_alpha, elastic_sigma=cli_args.elastic_sigma,
-        #         apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
-        #         apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha
-        #     )
-        # y_train_for_weights = np.argmax(y_train_np_encoded, axis=1) if y_train_np_encoded.ndim > 1 else y_train_np_encoded
-        # class_weights = make_class_weights(y_train_for_weights, num_classes)
-        y_labels_for_class_weights_calc = None # Biến tạm để lưu nhãn dùng tính class weights
-
-        if config.augment_data:
-            print(f"\n[INFO main_logic] Applying data augmentation to {config.dataset} training set...")
-            # generate_image_transforms trả về y_train_np_encoded là nhãn sau augmentation
-            X_train_np, y_train_np_encoded_after_aug = generate_image_transforms( # Đổi tên biến để rõ ràng
-                X_train_np, y_train_np, # y_train_np ở đây là one-hot từ split
-                apply_elastic=cli_args.apply_elastic, elastic_alpha=cli_args.elastic_alpha, elastic_sigma=cli_args.elastic_sigma,
-                apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
-                apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha
-            )
-            # Cập nhật y_train_np để phản ánh dữ liệu sau augmentation cho các bước sau (nếu cần)
-            y_train_np = y_train_np_encoded_after_aug # Gán lại y_train_np nếu có augmentation
-            y_labels_for_class_weights_calc = y_train_np_encoded_after_aug # Dùng nhãn sau aug để tính weights
-        else:
-            # Nếu không có augmentation, nhãn để tính class_weights chính là y_train_np (one-hot gốc)
-            y_labels_for_class_weights_calc = y_train_np
-
-        # Bây giờ tính y_train_for_weights dựa trên y_labels_for_class_weights_calc
-        # Đảm bảo y_labels_for_class_weights_calc không phải là None trước khi truy cập
-        if y_labels_for_class_weights_calc is not None:
-            # Chuyển về nhãn số (1D) nếu nó đang là one-hot (2D)
-            y_train_for_weights = np.argmax(y_labels_for_class_weights_calc, axis=1) if y_labels_for_class_weights_calc.ndim > 1 and y_labels_for_class_weights_calc.shape[1] > 1 else y_labels_for_class_weights_calc
+        # 1. TẢI DỮ LIỆU GỐC
+        X_np_loaded, y_numeric_labels = import_cmmd_dataset(cli_args.data_dir, le)
+        if X_np_loaded.size == 0:
+            print("[LỖI] Không tải được dữ liệu từ CMMD. Kết thúc.")
+            return
             
-            # Kiểm tra nếu y_train_for_weights vẫn là 2D (ví dụ: (N,1)), thì flatten nó
-            if y_train_for_weights.ndim > 1 and y_train_for_weights.shape[1] == 1:
-                y_train_for_weights = y_train_for_weights.flatten()
+        num_classes = len(np.unique(y_numeric_labels))
+        if num_classes == 1: 
+            num_classes = 2 # Xử lý trường hợp đặc biệt nếu split chỉ có 1 lớp
 
-            if y_train_for_weights.size > 0:
-                class_weights = make_class_weights(y_train_for_weights, num_classes)
-            else:
-                class_weights = None
-                print("[WARN CMMD] y_train_for_weights is empty after processing, cannot calculate class_weights.")
+        # 2. CHIA TẬP DỮ LIỆU (SPLIT 60-20-20)
+        # Chia lần 1: tách tập test (20%)
+        X_train_val, X_test_np, y_train_val_numeric, y_test_numeric = train_test_split(
+            X_np_loaded, y_numeric_labels, test_size=0.2, stratify=y_numeric_labels, random_state=config.RANDOM_SEED
+        )
+        # Chia lần 2: tách tập train (60%) và validation (20%) từ phần còn lại
+        X_train_np, X_val_np, y_train_numeric, y_val_numeric = train_test_split(
+            X_train_val, y_train_val_numeric, test_size=0.25, stratify=y_train_val_numeric, random_state=config.RANDOM_SEED
+        )
+        
+        print("\n--- Phân phối lớp sau khi chia (CMMD) ---")
+        print(f"Tập Train     : {X_train_np.shape[0]} mẫu - Phân phối: {Counter(y_train_numeric)}")
+        print(f"Tập Validation: {X_val_np.shape[0]} mẫu - Phân phối: {Counter(y_val_numeric)}")
+        print(f"Tập Test      : {X_test_np.shape[0]} mẫu - Phân phối: {Counter(y_test_numeric)}")
+
+        # 3. XỬ LÝ CÂN BẰNG VÀ TĂNG CƯỜNG DỮ LIỆU CHO TẬP TRAIN
+        class_weights = None
+        # Chuyển nhãn train sang dạng one-hot để chuẩn bị cho augmentation
+        y_train_np = to_categorical(y_train_numeric, num_classes=num_classes)
+
+        if cli_args.apply_oversampling:
+            print("\n[INFO] Chiến lược: Oversampling qua Augmentation.")
+            # Hàm generate_image_transforms sẽ thực hiện cả augmentation và oversampling
+            X_train_np, y_train_np = generate_image_transforms(
+                X_train_np, y_train_np,
+                apply_elastic=cli_args.apply_elastic,
+                apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
+                apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha,
+                oversample=True
+            )
+            # Khi đã oversampling, không cần dùng class weights nữa
+            print(f"[INFO] Kích thước tập train sau oversampling: {X_train_np.shape[0]} mẫu")
+
         else:
-            class_weights = None
-            print("[WARN CMMD] Labels for class weight calculation (y_labels_for_class_weights_calc) is None.")
+            print("\n[INFO] Chiến lược: Sử dụng Class Weights (nếu cần) và Augmentation cơ bản.")
+            # TÍNH CLASS WEIGHTS DỰA TRÊN TẬP TRAIN GỐC (TRƯỚC AUGMENTATION)
+            # Đây là cách làm đúng về mặt lý thuyết
+            class_weights = make_class_weights(y_train_numeric, num_classes=num_classes)
+            print(f"[INFO] Class weights đã được tính: {class_weights}")
 
+            # Nếu có cờ augmentation, chỉ áp dụng augmentation mà không thay đổi số lượng mẫu
+            if config.augment_data:
+                print("[INFO] Áp dụng data augmentation cho tập train...")
+                X_train_np, y_train_np = generate_image_transforms(
+                    X_train_np, y_train_np,
+                    apply_elastic=cli_args.apply_elastic,
+                    apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
+                    apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha,
+                    oversample=False # Quan trọng: chỉ tăng cường, không oversample
+                )
+        
+        # 4. CHUẨN BỊ DỮ LIỆU CUỐI CÙNG
+        # Chuyển các tập validation và test sang one-hot
+        y_val_np = to_categorical(y_val_numeric, num_classes=num_classes)
+        y_test_np = to_categorical(y_test_numeric, num_classes=num_classes)
+
+        # Đảm bảo tất cả các tập dữ liệu đều có kiểu float32
+        X_train_np = X_train_np.astype(np.float32)
+        y_train_np = y_train_np.astype(np.float32)
+        X_val_np = X_val_np.astype(np.float32)
+        y_val_np = y_val_np.astype(np.float32)
+        X_test_np = X_test_np.astype(np.float32)
+        y_test_np = y_test_np.astype(np.float32)
+
+        print("\n[INFO] Hoàn tất quá trình chuẩn bị dữ liệu cho CMMD.")
 
 # Trong main.py, sau khi có y_train_np, y_val_np, y_test_np
         print(f"\n[INFO] Class distribution for {config.dataset}:")

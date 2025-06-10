@@ -643,8 +643,8 @@ def import_cmmd_dataset(data_dir: str, label_encoder, target_size=None) -> (np.n
     # Mã hóa label (benign/malignant) thành số và one-hot nếu cần
     labels = encode_labels(labels, label_encoder)
     # --- Augmentation nếu được bật ---
-    if config.augment_data:
-        images, labels = generate_image_transforms(images, labels)
+    # if config.augment_data:
+    #     images, labels = generate_image_transforms(images, labels)
     return images, labels
 
 
