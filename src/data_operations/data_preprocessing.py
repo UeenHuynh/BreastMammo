@@ -134,9 +134,9 @@ def _remove_pectoral_muscle(image_2d_float):
     
     return final_image_float
 # =================================================================
-# HÀM LOAD DỮ LIỆU INBREAST HOÀN CHỈNH
+# HÀM LOAD DỮ LIỆU INBREAST ĐẦY ĐỦ VÀ HOÀN CHỈNH
 # =================================================================
-def load_inbreast_data_no_pectoral_removal(
+def load_inbreast_data_with_preprocessing(
     data_dir: str,
     label_encoder: LabelEncoder,
     use_roi_patches: bool,
@@ -144,6 +144,7 @@ def load_inbreast_data_no_pectoral_removal(
 ):
     """
     Tải dữ liệu INbreast, thực hiện cắt cơ ngực, CLAHE, và cắt ROI theo polygon.
+    Phiên bản hoàn chỉnh, xử lý cả chế độ ROI và Full Image.
     """
     print(f"\n[INFO] Loading INbreast data (WITH Pectoral Muscle Removal & Polygon ROI)...")
     print(f"  Mode: {'ROI (Polygon Mask)' if use_roi_patches else 'Full Image'}")
@@ -155,9 +156,8 @@ def load_inbreast_data_no_pectoral_removal(
 
     if not os.path.exists(csv_path): raise FileNotFoundError(f"INbreast.csv not found at {csv_path}")
     if not os.path.isdir(dicom_dir): raise NotADirectoryError(f"DICOM directory not found: {dicom_dir}")
-    if use_roi_patches and (not os.path.isdir(roi_dir) or not os.listdir(roi_dir)):
-        print(f"[CẢNH BÁO] Thư mục ROI '{roi_dir}' không tồn tại hoặc rỗng. Chuyển sang chế độ ảnh đầy đủ.")
-        use_roi_patches = False
+    if use_roi_patches and not os.path.isdir(roi_dir):
+        raise NotADirectoryError(f"ROI directory '{roi_dir}' not found, cannot run in ROI mode.")
 
     df = pd.read_csv(csv_path, sep=';')
     df.columns = [c.strip() for c in df.columns]
@@ -169,105 +169,135 @@ def load_inbreast_data_no_pectoral_removal(
 
     all_images_data_accumulator = []
     all_labels_text_accumulator = []
-    processed_dicom_count = 0
-
-    for index, row in df.iterrows():
-        file_id_csv = str(row['File Name']).strip()
-        patient_id_key = file_id_csv.split('_')[0]
-
-        dicom_path = None
-        found_dicom_files = tf.io.gfile.glob(os.path.join(dicom_dir, patient_id_key + "*.dcm"))
-        if found_dicom_files:
-            dicom_path = found_dicom_files[0]
-        
-        if not dicom_path:
-            continue
-
-        birad_value_csv = birad_map.get(patient_id_key)
-        if birad_value_csv is None: continue
-
-        current_label_text = None
-        for label_text_map, birad_code_list_map in config.INBREAST_BIRADS_MAPPING.items():
-            standardized_birad_codes = [val.replace("BI-RADS", "").strip() for val in birad_code_list_map]
-            if birad_value_csv in standardized_birad_codes:
-                current_label_text = label_text_map
-                break
-        
-        if current_label_text is None or current_label_text == "Normal":
-            continue
-        
-        try:
-            dicom_data = pydicom.dcmread(dicom_path)
-            image_array_original = dicom_data.pixel_array.astype(np.float32)
+    
+    # --- TÁCH BIỆT RÕ RÀNG GIỮA CHẾ ĐỘ ROI VÀ FULL ---
+    
+    if use_roi_patches:
+        # === CHẾ ĐỘ ROI: QUÉT THƯ MỤC ROI TRƯỚC ===
+        print("[INFO] ROI mode enabled. Scanning AllROI directory...")
+        for roi_filename in sorted(os.listdir(roi_dir)):
+            if not roi_filename.lower().endswith(".roi"):
+                continue
             
-            # Chuẩn hóa ảnh gốc về [0,1]
-            min_val, max_val = np.min(image_array_original), np.max(image_array_original)
-            if max_val - min_val > 1e-8:
-                current_image_processed_2d = (image_array_original - min_val) / (max_val - min_val)
-            else:
-                current_image_processed_2d = np.zeros_like(image_array_original, dtype=np.float32)
+            roi_path = os.path.join(roi_dir, roi_filename)
+            coords, label_name = load_roi_and_label(roi_path, birad_map)
 
-            # *** BƯỚC 1: CẮT CƠ NGỰC ***
-            image_pectoral_removed_2d = _remove_pectoral_muscle(current_image_processed_2d)
+            if coords is None or label_name is None:
+                continue
 
-            # *** BƯỚC 2: ÁP DỤNG CLAHE ***
-            image_uint8_for_clahe = (image_pectoral_removed_2d * 255).astype(np.uint8)
-            clahe_processor = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            image_after_clahe_uint8 = clahe_processor.apply(image_uint8_for_clahe)
-            image_final_preprocessed_2d = image_after_clahe_uint8.astype(np.float32) / 255.0
+            # Tìm file DICOM tương ứng
+            pid = os.path.splitext(roi_filename)[0].split('_', 1)[0]
+            dicom_matches = [f for f in os.listdir(dicom_dir) if f.startswith(pid) and f.lower().endswith(".dcm")]
+            if not dicom_matches:
+                continue
+            
+            dicom_path = os.path.join(dicom_dir, dicom_matches[0])
 
-            images_for_this_entry_raw_2d = []
+            try:
+                # Tải và xử lý ảnh DICOM
+                dicom_data = pydicom.dcmread(dicom_path)
+                image_array_original = dicom_data.pixel_array.astype(np.float32)
+                min_val, max_val = np.min(image_array_original), np.max(image_array_original)
+                image_normalized = (image_array_original - min_val) / (max_val - min_val + 1e-8)
 
-            if use_roi_patches:
-                base_name_for_roi = os.path.splitext(os.path.basename(dicom_path))[0]
-                roi_file_pattern = os.path.join(roi_dir, base_name_for_roi + "*.roi")
-                matching_roi_files = tf.io.gfile.glob(roi_file_pattern)
+                image_pectoral_removed = _remove_pectoral_muscle(image_normalized)
                 
-                if not matching_roi_files: continue
+                image_uint8_clahe = (image_pectoral_removed * 255).astype(np.uint8)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                image_clahe = clahe.apply(image_uint8_clahe).astype(np.float32) / 255.0
 
-                rois_found_for_dicom = 0
-                for roi_path_single in matching_roi_files:
-                    coords_roi, roi_label_text_from_func = load_roi_and_label(roi_path_single, birad_map)
-                    
-                    if coords_roi is None or not coords_roi or roi_label_text_from_func != current_label_text:
-                        continue
-                    
-                    # *** BƯỚC 3: CẮT ROI DẠNG POLYGON ***
-                    roi_mask = np.zeros(image_final_preprocessed_2d.shape[:2], dtype=np.uint8)
-                    polygon_points = np.array(coords_roi, dtype=np.int32)
-                    cv2.fillPoly(roi_mask, [polygon_points], 255)
-                    
-                    image_with_roi_only = cv2.bitwise_and(image_final_preprocessed_2d, image_final_preprocessed_2d, mask=roi_mask)
-                    
-                    x, y, w, h = cv2.boundingRect(polygon_points)
-                    roi_patch = image_with_roi_only[y:y+h, x:x+w]
-                    
-                    if roi_patch.size > 0:
-                        resized_roi_2d = cv2.resize(roi_patch, target_size, interpolation=cv2.INTER_AREA)
-                        images_for_this_entry_raw_2d.append(resized_roi_2d)
-                        rois_found_for_dicom += 1
+                # Tạo mask và cắt ROI theo polygon
+                roi_mask = np.zeros(image_clahe.shape[:2], dtype=np.uint8)
+                polygon_points = np.array(coords, dtype=np.int32)
+                cv2.fillPoly(roi_mask, [polygon_points], 255)
                 
-                if rois_found_for_dicom == 0: continue
-            else: # Chế độ ảnh đầy đủ
-                resized_full_2d = cv2.resize(image_final_preprocessed_2d, target_size, interpolation=cv2.INTER_AREA)
-                images_for_this_entry_raw_2d.append(resized_full_2d)
+                image_with_roi_only = cv2.bitwise_and(image_clahe, image_clahe, mask=roi_mask)
+                
+                x, y, w, h = cv2.boundingRect(polygon_points)
+                roi_patch = image_with_roi_only[y:y+h, x:x+w]
+                
+                if roi_patch.size > 0:
+                    resized_roi = cv2.resize(roi_patch, target_size, interpolation=cv2.INTER_AREA)
+                    
+                    if config.model != "CNN":
+                        final_image = cv2.cvtColor(resized_roi, cv2.COLOR_GRAY2RGB)
+                    else:
+                        final_image = np.expand_dims(resized_roi, axis=-1)
+                    
+                    all_images_data_accumulator.append(final_image.astype(np.float32))
+                    all_labels_text_accumulator.append(label_name)
 
-            for img_2d_processed in images_for_this_entry_raw_2d:
-                # Xử lý kênh cho model
+            except Exception as e:
+                print(f"  [LỖI] Xảy ra lỗi khi xử lý ROI {roi_filename} và DICOM {dicom_path}: {e}")
+                continue
+    else:
+        # ===============================================================
+        # === CHẾ ĐỘ FULL IMAGE: ĐÂY LÀ PHẦN CODE ĐẦY ĐỦ BẠN CẦN ===
+        # ===============================================================
+        print("[INFO] Full image mode enabled. Scanning AllDICOMs directory...")
+        for index, row in df.iterrows():
+            file_id_csv = str(row['File Name']).strip()
+            patient_id_key = file_id_csv.split('_')[0]
+
+            # Tìm file DICOM
+            dicom_path = None
+            found_dicom_files = tf.io.gfile.glob(os.path.join(dicom_dir, patient_id_key + "*.dcm"))
+            if found_dicom_files:
+                dicom_path = found_dicom_files[0]
+            
+            if not dicom_path: continue
+
+            # Lấy nhãn từ BI-RADS
+            birad_value_csv = birad_map.get(patient_id_key)
+            if birad_value_csv is None: continue
+
+            current_label_text = None
+            for label_text_map, birad_code_list_map in config.INBREAST_BIRADS_MAPPING.items():
+                standardized_birad_codes = [val.replace("BI-RADS", "").strip() for val in birad_code_list_map]
+                if birad_value_csv in standardized_birad_codes:
+                    current_label_text = label_text_map
+                    break
+            
+            # Bỏ qua các ảnh Normal
+            if current_label_text is None or current_label_text == "Normal": continue
+            
+            try:
+                # Tải và xử lý ảnh DICOM
+                dicom_data = pydicom.dcmread(dicom_path)
+                image_array_original = dicom_data.pixel_array.astype(np.float32)
+                
+                # Chuẩn hóa
+                min_val, max_val = np.min(image_array_original), np.max(image_array_original)
+                image_normalized = (image_array_original - min_val) / (max_val - min_val + 1e-8)
+                
+                # Cắt cơ ngực
+                image_pectoral_removed = _remove_pectoral_muscle(image_normalized)
+                
+                # Áp dụng CLAHE
+                image_uint8_clahe = (image_pectoral_removed * 255).astype(np.uint8)
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                image_clahe = clahe.apply(image_uint8_clahe).astype(np.float32) / 255.0
+                
+                # Resize về kích thước mục tiêu
+                resized_full = cv2.resize(image_clahe, target_size, interpolation=cv2.INTER_AREA)
+
+                # Xử lý kênh
                 if config.model != "CNN":
-                    final_model_input_image = cv2.cvtColor(img_2d_processed, cv2.COLOR_GRAY2RGB)
+                    final_image = cv2.cvtColor(resized_full, cv2.COLOR_GRAY2RGB)
                 else:
-                    final_model_input_image = np.expand_dims(img_2d_processed, axis=-1)
+                    final_image = np.expand_dims(resized_full, axis=-1)
                 
-                all_images_data_accumulator.append(final_model_input_image.astype(np.float32))
+                # Thêm vào danh sách
+                all_images_data_accumulator.append(final_image.astype(np.float32))
                 all_labels_text_accumulator.append(current_label_text)
-                processed_dicom_count += 1
 
-        except Exception as e_outer:
-            print(f"  [LỖI] Xảy ra lỗi khi xử lý file {dicom_path}: {e_outer}")
-            continue
-            
-    print(f"[INFO] Tổng số ảnh/ROI đã xử lý thành công: {processed_dicom_count}")
+            except Exception as e:
+                print(f"  [LỖI] Xảy ra lỗi khi xử lý ảnh đầy đủ {dicom_path}: {e}")
+                continue
+
+
+    # --- PHẦN CUỐI CÙNG ---
+    print(f"[INFO] Tổng số ảnh/ROI đã xử lý thành công: {len(all_images_data_accumulator)}")
     
     if not all_images_data_accumulator:
         print("[LỖI] Không có ảnh nào được tải. Trả về mảng rỗng.")
@@ -279,6 +309,7 @@ def load_inbreast_data_no_pectoral_removal(
     print(f"[INFO] Trả về dữ liệu thô đã xử lý: X_shape={final_images_array.shape}, y_text_shape={final_labels_text_array.shape}")
     
     return final_images_array, final_labels_text_array
+
 # def load_inbreast_data_no_pectoral_removal(
 #     data_dir: str,
 #     label_encoder: LabelEncoder, # Sẽ được fit ở main.py sau khi có tất cả label text

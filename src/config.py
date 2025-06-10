@@ -69,6 +69,7 @@ verbose_mode = True         # In thêm thông tin log để debug nếu cần th
 name = ""                   # Tên của thí nghiệm hiện tại
 
 # Thêm thông số cho augmentation (tăng cường dữ liệu)
+APPLY_OVERSAMPLING = True
 augment_data = True          # Có áp dụng augmentation hay không
 
 # BI-RADS mapping cho INbreast dataset
