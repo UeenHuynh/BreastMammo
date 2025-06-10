@@ -11,7 +11,7 @@ import skimage.filters # Cho GaussianBlur
 import skimage.exposure # Cho điều chỉnh độ sáng (gamma) hoặc rescale_intensity
 import random
 import tensorflow.keras.backend as K
-
+from collections import Counter
 # src/data_operations/data_transformations.py
 
 import random
@@ -1042,19 +1042,176 @@ def label_is_binary(labels: np.ndarray) -> bool:
 
 # === PHIÊN BẢN HÀM generate_image_transforms ĐÃ ĐƯỢC TINH CHỈNH ===
 # Giữ nguyên hoàn toàn chữ ký hàm và tên biến của bạn
+# def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
+#                               apply_elastic: bool = False, elastic_alpha: float = 34.0, elastic_sigma: float = 4.0,
+#                               apply_mixup: bool = False, mixup_alpha: float = 0.2,
+#                               apply_cutmix: bool = False, cutmix_alpha: float = 1.0,
+#                               oversample: bool = False): # <-- THÊM THAM SỐ NÀY
+#     """
+#     Tăng cường và cân bằng dữ liệu ảnh bằng phương pháp oversampling.
+#     Hàm này được tinh chỉnh từ code gốc để đảm bảo logic rõ ràng và mạnh mẽ hơn.
+#     """
+#     print("[INFO Augment] Bắt đầu quá trình tăng cường và oversampling...")
+#     # --- BƯỚC 1: CHUẨN BỊ NHÃN (Giữ nguyên logic của bạn) ---
+#     is_binary_scalar_original = label_is_binary(labels)
+    
+#     if is_binary_scalar_original:
+#         num_classes = 2
+#         labels_one_hot = tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(np.float32)
+#     elif labels.ndim == 2 and labels.shape[1] > 1:
+#         num_classes = labels.shape[1]
+#         labels_one_hot = labels.astype(np.float32)
+#     else:
+#         num_classes = len(np.unique(labels)) if labels.size > 0 else 2
+#         labels_one_hot = tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(np.float32)
+    
+#     # --- BƯỚC 2: CHUẨN HÓA VÀ ÁP DỤNG ELASTIC TRANSFORM (NẾU CÓ) ---
+#     initial_images_processed_for_aug = []
+#     for img_orig in images:
+#         # Chuẩn hóa ảnh về [0, 1]
+#         img_f = img_orig.astype(np.float32)
+#         if np.max(img_f) > 1.0:
+#             min_v, max_v = np.min(img_f), np.max(img_f)
+#             img_f = (img_f - min_v) / (max_v - min_v + 1e-8)
+#         img_f = np.clip(img_f, 0.0, 1.0)
+        
+#         # Đảm bảo ảnh có kênh (channel)
+#         if img_f.ndim == 2:
+#             img_f = np.expand_dims(img_f, axis=-1)
+
+#         # Áp dụng Elastic Transform nếu được yêu cầu
+#         if apply_elastic:
+#             img_f = elastic_transform(img_f, alpha=elastic_alpha, sigma=elastic_sigma)
+
+#         initial_images_processed_for_aug.append(img_f)
+
+#     if not initial_images_processed_for_aug:
+#         print("[LỖI Augment] Không xử lý được ảnh nào. Trả về dữ liệu gốc.")
+#         return images, labels
+
+#     # --- BƯỚC 3: OVERSAMPLING VỚI CÁC PHÉP BIẾN ĐỔI CƠ BẢN ---
+
+#     # augmented_images_list = list(initial_images_processed_for_aug)
+#     # augmented_labels_list = list(labels_one_hot)
+#     # --- BƯỚC 2: ĐỊNH NGHĨA CÁC PHÉP BIẾN ĐỔI (Chuyển ra ngoài) ---
+#     # Chuyển khối này ra ngoài để cả 2 kịch bản đều có thể sử dụng
+#     basic_transforms = {
+#         'rotate': random_rotation,
+#         'horizontal_flip': horizontal_flip,
+#         'shear': random_shearing,
+#         'gamma_correction': gamma_correction
+#     }
+#     transform_keys = list(basic_transforms.keys())
+    
+#     augmented_images_list = list(initial_images_processed_for_aug)
+#     augmented_labels_list = list(labels_one_hot)
+
+#     # --- BƯỚC 3: OVERSAMPLING HOẶC AUGMENTATION CƠ BẢN ---
+#     # --- LOGIC MỚI BẮT ĐẦU TỪ ĐÂY ---
+#     if oversample:
+#         print("[INFO Augment] Chế độ Oversampling được bật.")
+#         basic_transforms = {
+#             'rotate': random_rotation,
+#             'horizontal_flip': horizontal_flip,
+#             'shear': random_shearing,
+#             'gamma_correction': gamma_correction
+#         }
+#         transform_keys = list(basic_transforms.keys())
+#     else: # Kịch bản không oversampling (chỉ augment)
+#         print("[INFO Augment] Chế độ Augmentation cơ bản (không Oversampling).")
+#         temp_augmented_images = []
+#         # Vòng lặp qua từng ảnh để áp dụng biến đổi ngẫu nhiên
+#         for image_to_transform in initial_images_processed_for_aug:
+#             # Áp dụng một phép biến đổi ngẫu nhiên từ danh sách
+#             transform_name = random.choice(transform_keys)
+#             transformed_image = basic_transforms[transform_name](image_to_transform)
+#             temp_augmented_images.append(transformed_image)
+#         # Gán lại kết quả sau khi đã biến đổi tất cả
+#         augmented_images_list = temp_augmented_images
+#     # Chuyển đổi list về lại numpy array
+#     final_images_np = np.array(augmented_images_list, dtype=np.float32)
+#     final_labels_np = np.array(augmented_labels_list, dtype=np.float32)
+
+#     # Xác định số lượng mẫu mục tiêu
+#     dataset_name = getattr(config, 'dataset', '')
+#     if dataset_name == "INbreast":
+#         target_multiplier = int(getattr(config, 'INBREAST_AUG_MULTIPLIER', 2))
+#     else: # Mặc định cho CMMD và các bộ khác
+#         target_multiplier = int(getattr(config, 'BINARY_AUG_MULTIPLIER', 2))
+
+#     class_counts = get_class_balances(labels_one_hot)
+    
+#     if not class_counts or max(class_counts) == 0:
+#         print("[CẢNH BÁO Augment] Không tìm thấy mẫu nào trong các lớp. Bỏ qua oversampling.")
+#     else:
+#         target_count_per_class = max(class_counts) * target_multiplier
+#         print(f"[INFO Augment] Mục tiêu oversampling: {target_count_per_class} mẫu mỗi lớp.")
+
+#         for class_idx in range(num_classes):
+#             current_class_count = class_counts[class_idx]
+#             num_to_generate = target_count_per_class - current_class_count
+            
+#             if num_to_generate <= 0:
+#                 continue
+
+#             print(f"  > Lớp {class_idx}: Cần tạo thêm {num_to_generate} mẫu.")
+#             original_indices_for_class = [j for j, lab_vec in enumerate(labels_one_hot) if np.argmax(lab_vec) == class_idx]
+            
+#             if not original_indices_for_class:
+#                 continue
+
+#             for _ in range(int(num_to_generate)):
+#                 # Chọn ngẫu nhiên một ảnh gốc (đã qua elastic) để biến đổi
+#                 original_image_idx = random.choice(original_indices_for_class)
+#                 original_image_for_transform = initial_images_processed_for_aug[original_image_idx]
+                
+#                 # Chọn và áp dụng một phép biến đổi cơ bản ngẫu nhiên
+#                 # Đây là logic thay thế cho hàm create_individual_transform
+#                 transform_name = random.choice(transform_keys)
+#                 transformed_image = basic_transforms[transform_name](original_image_for_transform)
+
+#                 augmented_images_list.append(transformed_image)
+#                 augmented_labels_list.append(labels_one_hot[original_image_idx].copy())
+
+#     # Chuyển đổi list về lại numpy array
+#     final_images_np = np.array(augmented_images_list, dtype=np.float32)
+#     final_labels_np = np.array(augmented_labels_list, dtype=np.float32)
+
+#     # --- BƯỚC 4 & 5: ÁP DỤNG MIXUP / CUTMIX (Giữ nguyên logic của bạn) ---
+#     if apply_mixup and final_images_np.shape[0] > 1:
+#         print("[INFO Augment] Áp dụng MixUp...")
+#         tf_images, tf_labels = mixup_tf(tf.convert_to_tensor(final_images_np), tf.convert_to_tensor(final_labels_np), alpha=mixup_alpha)
+#         final_images_np, final_labels_np = tf_images.numpy(), tf_labels.numpy()
+
+#     if apply_cutmix and final_images_np.shape[0] > 1:
+#         print("[INFO Augment] Áp dụng CutMix...")
+#         tf_images, tf_labels = cutmix_tf(tf.convert_to_tensor(final_images_np), tf.convert_to_tensor(final_labels_np), alpha=cutmix_alpha)
+#         final_images_np, final_labels_np = tf.clip_by_value(tf_images, 0.0, 1.0).numpy(), tf_labels.numpy()
+
+#     final_images_output = final_images_np
+#     final_labels_output = final_labels_np
+
+#     # --- BƯỚC 6: XỬ LÝ NHÃN CUỐI CÙNG (Giữ nguyên logic của bạn) ---
+#     if is_binary_scalar_original and final_labels_output.ndim == 2:
+#         final_labels_output = np.argmax(final_labels_output, axis=1)
+    
+#     print(f"[INFO Augment] Hoàn tất. Shape cuối cùng: images={final_images_output.shape}, labels={final_labels_output.shape}")
+#     return final_images_output, final_labels_output
+
 def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
                               apply_elastic: bool = False, elastic_alpha: float = 34.0, elastic_sigma: float = 4.0,
                               apply_mixup: bool = False, mixup_alpha: float = 0.2,
                               apply_cutmix: bool = False, cutmix_alpha: float = 1.0,
-                              oversample: bool = False): # <-- THÊM THAM SỐ NÀY
+                              oversample: bool = False):
     """
-    Tăng cường và cân bằng dữ liệu ảnh bằng phương pháp oversampling.
-    Hàm này được tinh chỉnh từ code gốc để đảm bảo logic rõ ràng và mạnh mẽ hơn.
+    Tăng cường và (tùy chọn) cân bằng dữ liệu ảnh, dựa trên cấu trúc gốc.
+    - oversample=True: Thực hiện oversampling để cân bằng lớp.
+    - oversample=False: Chỉ áp dụng augmentation cơ bản trên các ảnh hiện có.
     """
-    print("[INFO Augment] Bắt đầu quá trình tăng cường và oversampling...")
-    # --- BƯỚC 1: CHUẨN BỊ NHÃN (Giữ nguyên logic của bạn) ---
+    print(f"[INFO Augment] Bắt đầu. Oversampling: {oversample}, Elastic: {apply_elastic}, MixUp: {apply_mixup}")
+
+    # --- BƯỚC 1: CHUẨN BỊ DỮ LIỆU ĐẦU VÀO ---
     is_binary_scalar_original = label_is_binary(labels)
-    
     if is_binary_scalar_original:
         num_classes = 2
         labels_one_hot = tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(np.float32)
@@ -1064,134 +1221,94 @@ def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
     else:
         num_classes = len(np.unique(labels)) if labels.size > 0 else 2
         labels_one_hot = tf.keras.utils.to_categorical(labels, num_classes=num_classes).astype(np.float32)
-    
-    # --- BƯỚC 2: CHUẨN HÓA VÀ ÁP DỤNG ELASTIC TRANSFORM (NẾU CÓ) ---
+
     initial_images_processed_for_aug = []
     for img_orig in images:
-        # Chuẩn hóa ảnh về [0, 1]
         img_f = img_orig.astype(np.float32)
         if np.max(img_f) > 1.0:
             min_v, max_v = np.min(img_f), np.max(img_f)
-            img_f = (img_f - min_v) / (max_v - min_v + 1e-8)
+            img_f = (img_f - min_v) / (max_v - min_v + 1e-8) if (max_v - min_v) > 1e-8 else np.zeros_like(img_f)
         img_f = np.clip(img_f, 0.0, 1.0)
-        
-        # Đảm bảo ảnh có kênh (channel)
-        if img_f.ndim == 2:
-            img_f = np.expand_dims(img_f, axis=-1)
-
-        # Áp dụng Elastic Transform nếu được yêu cầu
+        if img_f.ndim == 2: img_f = np.expand_dims(img_f, axis=-1)
         if apply_elastic:
             img_f = elastic_transform(img_f, alpha=elastic_alpha, sigma=elastic_sigma)
-
         initial_images_processed_for_aug.append(img_f)
-
+        
     if not initial_images_processed_for_aug:
-        print("[LỖI Augment] Không xử lý được ảnh nào. Trả về dữ liệu gốc.")
         return images, labels
 
-    # --- BƯỚC 3: OVERSAMPLING VỚI CÁC PHÉP BIẾN ĐỔI CƠ BẢN ---
-
-    # augmented_images_list = list(initial_images_processed_for_aug)
-    # augmented_labels_list = list(labels_one_hot)
-    # --- BƯỚC 2: ĐỊNH NGHĨA CÁC PHÉP BIẾN ĐỔI (Chuyển ra ngoài) ---
-    # Chuyển khối này ra ngoài để cả 2 kịch bản đều có thể sử dụng
+    # --- BƯỚC 2: AUGMENTATION VÀ OVERSAMPLING ---
     basic_transforms = {
-        'rotate': random_rotation,
-        'horizontal_flip': horizontal_flip,
-        'shear': random_shearing,
-        'gamma_correction': gamma_correction
+        'rotate': random_rotation, 'horizontal_flip': horizontal_flip,
+        'shear': random_shearing, 'gamma_correction': gamma_correction
     }
     transform_keys = list(basic_transforms.keys())
-    
+
+    # Khởi tạo danh sách kết quả với dữ liệu gốc đã xử lý
     augmented_images_list = list(initial_images_processed_for_aug)
     augmented_labels_list = list(labels_one_hot)
 
-    # --- BƯỚC 3: OVERSAMPLING HOẶC AUGMENTATION CƠ BẢN ---
-    # --- LOGIC MỚI BẮT ĐẦU TỪ ĐÂY ---
     if oversample:
         print("[INFO Augment] Chế độ Oversampling được bật.")
-        basic_transforms = {
-            'rotate': random_rotation,
-            'horizontal_flip': horizontal_flip,
-            'shear': random_shearing,
-            'gamma_correction': gamma_correction
-        }
-        transform_keys = list(basic_transforms.keys())
-    else: # Kịch bản không oversampling (chỉ augment)
+        y_numeric = np.argmax(labels_one_hot, axis=1)
+        class_counts = Counter(y_numeric)
+        
+        if class_counts:
+            max_class_count = max(class_counts.values())
+            target_multiplier = getattr(config, f"{config.dataset.upper()}_AUG_MULTIPLIER", 2)
+            target_count_per_class = int(max_class_count * target_multiplier)
+            print(f"[INFO Augment] Mục tiêu oversampling: {target_count_per_class} mẫu mỗi lớp.")
+
+            for class_idx, current_count in class_counts.items():
+                num_to_generate = target_count_per_class - current_count
+                if num_to_generate <= 0: continue
+                
+                original_indices = np.where(y_numeric == class_idx)[0]
+                if len(original_indices) == 0: continue
+
+                for _ in range(num_to_generate):
+                    random_idx = np.random.choice(original_indices)
+                    base_image = initial_images_processed_for_aug[random_idx]
+                    transform_name = random.choice(transform_keys)
+                    transformed_image = basic_transforms[transform_name](base_image)
+                    augmented_images_list.append(transformed_image)
+                    augmented_labels_list.append(labels_one_hot[random_idx])
+    
+    else: # oversample=False
         print("[INFO Augment] Chế độ Augmentation cơ bản (không Oversampling).")
+        # Logic này sẽ thay thế toàn bộ danh sách ảnh cũ bằng phiên bản augment
         temp_augmented_images = []
-        # Vòng lặp qua từng ảnh để áp dụng biến đổi ngẫu nhiên
         for image_to_transform in initial_images_processed_for_aug:
-            # Áp dụng một phép biến đổi ngẫu nhiên từ danh sách
+            # Áp dụng một phép biến đổi ngẫu nhiên
             transform_name = random.choice(transform_keys)
             transformed_image = basic_transforms[transform_name](image_to_transform)
             temp_augmented_images.append(transformed_image)
         # Gán lại kết quả sau khi đã biến đổi tất cả
         augmented_images_list = temp_augmented_images
-    # Chuyển đổi list về lại numpy array
+
+
+    # --- BƯỚC 3: XỬ LÝ SAU AUGMENTATION (MIXUP, CUTMIX) ---
     final_images_np = np.array(augmented_images_list, dtype=np.float32)
     final_labels_np = np.array(augmented_labels_list, dtype=np.float32)
 
-    # Xác định số lượng mẫu mục tiêu
-    dataset_name = getattr(config, 'dataset', '')
-    if dataset_name == "INbreast":
-        target_multiplier = int(getattr(config, 'INBREAST_AUG_MULTIPLIER', 2))
-    else: # Mặc định cho CMMD và các bộ khác
-        target_multiplier = int(getattr(config, 'BINARY_AUG_MULTIPLIER', 2))
-
-    class_counts = get_class_balances(labels_one_hot)
-    
-    if not class_counts or max(class_counts) == 0:
-        print("[CẢNH BÁO Augment] Không tìm thấy mẫu nào trong các lớp. Bỏ qua oversampling.")
-    else:
-        target_count_per_class = max(class_counts) * target_multiplier
-        print(f"[INFO Augment] Mục tiêu oversampling: {target_count_per_class} mẫu mỗi lớp.")
-
-        for class_idx in range(num_classes):
-            current_class_count = class_counts[class_idx]
-            num_to_generate = target_count_per_class - current_class_count
-            
-            if num_to_generate <= 0:
-                continue
-
-            print(f"  > Lớp {class_idx}: Cần tạo thêm {num_to_generate} mẫu.")
-            original_indices_for_class = [j for j, lab_vec in enumerate(labels_one_hot) if np.argmax(lab_vec) == class_idx]
-            
-            if not original_indices_for_class:
-                continue
-
-            for _ in range(int(num_to_generate)):
-                # Chọn ngẫu nhiên một ảnh gốc (đã qua elastic) để biến đổi
-                original_image_idx = random.choice(original_indices_for_class)
-                original_image_for_transform = initial_images_processed_for_aug[original_image_idx]
-                
-                # Chọn và áp dụng một phép biến đổi cơ bản ngẫu nhiên
-                # Đây là logic thay thế cho hàm create_individual_transform
-                transform_name = random.choice(transform_keys)
-                transformed_image = basic_transforms[transform_name](original_image_for_transform)
-
-                augmented_images_list.append(transformed_image)
-                augmented_labels_list.append(labels_one_hot[original_image_idx].copy())
-
-    # Chuyển đổi list về lại numpy array
-    final_images_np = np.array(augmented_images_list, dtype=np.float32)
-    final_labels_np = np.array(augmented_labels_list, dtype=np.float32)
-
-    # --- BƯỚC 4 & 5: ÁP DỤNG MIXUP / CUTMIX (Giữ nguyên logic của bạn) ---
     if apply_mixup and final_images_np.shape[0] > 1:
         print("[INFO Augment] Áp dụng MixUp...")
-        tf_images, tf_labels = mixup_tf(tf.convert_to_tensor(final_images_np), tf.convert_to_tensor(final_labels_np), alpha=mixup_alpha)
+        tf_images = tf.convert_to_tensor(final_images_np, dtype=tf.float32)
+        tf_labels = tf.convert_to_tensor(final_labels_np, dtype=tf.float32)
+        tf_images, tf_labels = mixup_tf(tf_images, tf_labels, alpha=mixup_alpha)
         final_images_np, final_labels_np = tf_images.numpy(), tf_labels.numpy()
 
     if apply_cutmix and final_images_np.shape[0] > 1:
         print("[INFO Augment] Áp dụng CutMix...")
-        tf_images, tf_labels = cutmix_tf(tf.convert_to_tensor(final_images_np), tf.convert_to_tensor(final_labels_np), alpha=cutmix_alpha)
+        tf_images = tf.convert_to_tensor(final_images_np, dtype=tf.float32)
+        tf_labels = tf.convert_to_tensor(final_labels_np, dtype=tf.float32)
+        tf_images, tf_labels = cutmix_tf(tf_images, tf_labels, alpha=cutmix_alpha)
         final_images_np, final_labels_np = tf.clip_by_value(tf_images, 0.0, 1.0).numpy(), tf_labels.numpy()
-
+    
     final_images_output = final_images_np
     final_labels_output = final_labels_np
 
-    # --- BƯỚC 6: XỬ LÝ NHÃN CUỐI CÙNG (Giữ nguyên logic của bạn) ---
+    # --- BƯỚC 4: XỬ LÝ NHÃN CUỐI CÙNG ---
     if is_binary_scalar_original and final_labels_output.ndim == 2:
         final_labels_output = np.argmax(final_labels_output, axis=1)
     
