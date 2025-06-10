@@ -1091,8 +1091,21 @@ def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
 
     # --- BƯỚC 3: OVERSAMPLING VỚI CÁC PHÉP BIẾN ĐỔI CƠ BẢN ---
 
+    # augmented_images_list = list(initial_images_processed_for_aug)
+    # augmented_labels_list = list(labels_one_hot)
+    # --- BƯỚC 2: ĐỊNH NGHĨA CÁC PHÉP BIẾN ĐỔI (Chuyển ra ngoài) ---
+    # Chuyển khối này ra ngoài để cả 2 kịch bản đều có thể sử dụng
+    basic_transforms = {
+        'rotate': random_rotation,
+        'horizontal_flip': horizontal_flip,
+        'shear': random_shearing,
+        'gamma_correction': gamma_correction
+    }
+    transform_keys = list(basic_transforms.keys())
+    
     augmented_images_list = list(initial_images_processed_for_aug)
     augmented_labels_list = list(labels_one_hot)
+
     # --- BƯỚC 3: OVERSAMPLING HOẶC AUGMENTATION CƠ BẢN ---
     # --- LOGIC MỚI BẮT ĐẦU TỪ ĐÂY ---
     if oversample:
@@ -1104,13 +1117,20 @@ def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
             'gamma_correction': gamma_correction
         }
         transform_keys = list(basic_transforms.keys())
-    else:
+    else: # Kịch bản không oversampling (chỉ augment)
         print("[INFO Augment] Chế độ Augmentation cơ bản (không Oversampling).")
-        # Chỉ áp dụng biến đổi trên các ảnh đã có, không tạo thêm
-        # Ví dụ: chỉ áp dụng elastic đã có ở bước 2, hoặc có thể thêm lật/xoay ngẫu nhiên
-        # Để đơn giản, ở đây ta chỉ giữ lại các ảnh đã qua elastic transform (nếu có)
-        # Nếu muốn thêm, bạn có thể thêm logic lật/xoay ngẫu nhiên ở đây
-        pass # Giữ nguyên augmented_images_list vì nó đã chứa ảnh đã qua elastic
+        temp_augmented_images = []
+        # Vòng lặp qua từng ảnh để áp dụng biến đổi ngẫu nhiên
+        for image_to_transform in initial_images_processed_for_aug:
+            # Áp dụng một phép biến đổi ngẫu nhiên từ danh sách
+            transform_name = random.choice(transform_keys)
+            transformed_image = basic_transforms[transform_name](image_to_transform)
+            temp_augmented_images.append(transformed_image)
+        # Gán lại kết quả sau khi đã biến đổi tất cả
+        augmented_images_list = temp_augmented_images
+    # Chuyển đổi list về lại numpy array
+    final_images_np = np.array(augmented_images_list, dtype=np.float32)
+    final_labels_np = np.array(augmented_labels_list, dtype=np.float32)
 
     # Xác định số lượng mẫu mục tiêu
     dataset_name = getattr(config, 'dataset', '')
