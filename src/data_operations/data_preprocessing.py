@@ -136,7 +136,7 @@ def _remove_pectoral_muscle(image_2d_float):
 # =================================================================
 # HÀM LOAD DỮ LIỆU INBREAST ĐẦY ĐỦ VÀ HOÀN CHỈNH
 # =================================================================
-def load_inbreast_data_with_preprocessing(
+def load_inbreast_data_no_pectoral_removal(
     data_dir: str,
     label_encoder: LabelEncoder,
     use_roi_patches: bool,
