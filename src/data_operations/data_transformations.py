@@ -1115,7 +1115,7 @@ def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
     # Xác định số lượng mẫu mục tiêu
     dataset_name = getattr(config, 'dataset', '')
     if dataset_name == "INbreast":
-        target_multiplier = int(getattr(config, 'INBREAST_AUG_MULTIPLIER', 3))
+        target_multiplier = int(getattr(config, 'INBREAST_AUG_MULTIPLIER', 2))
     else: # Mặc định cho CMMD và các bộ khác
         target_multiplier = int(getattr(config, 'BINARY_AUG_MULTIPLIER', 2))
 
