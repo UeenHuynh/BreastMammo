@@ -667,41 +667,25 @@ def main_logic(cli_args):
         print(f"Tập Validation: {X_val_np.shape[0]} mẫu - Phân phối: {Counter(y_val_numeric)}")
         print(f"Tập Test      : {X_test_np.shape[0]} mẫu - Phân phối: {Counter(y_test_numeric)}")
 
-        # 3. XỬ LÝ CÂN BẰNG VÀ TĂNG CƯỜNG DỮ LIỆU CHO TẬP TRAIN
-        class_weights = None
-        # Chuyển nhãn train sang dạng one-hot để chuẩn bị cho augmentation
+        # 3. QUYẾT ĐỊNH CHIẾN LƯỢC (SỬA LỖI LOGIC)
         y_train_np = to_categorical(y_train_numeric, num_classes=num_classes)
 
-        if cli_args.apply_oversampling:
-            print("\n[INFO] Chiến lược: Oversampling qua Augmentation.")
-            # Hàm generate_image_transforms sẽ thực hiện cả augmentation và oversampling
+        # Chiến lược cho CMMD: Luôn dùng Class Weights, Augmentation là tùy chọn
+        # Chúng ta sẽ không dùng oversampling cho CMMD
+        print("\n[INFO] CMMD: Sử dụng chiến lược Class Weights.")
+        class_weights = make_class_weights(y_train_numeric)
+        print(f"Class Weights đã tính cho CMMD: {class_weights}")
+
+        # Chỉ áp dụng các phép biến đổi hình học cơ bản nếu có cờ
+        if config.augment_data:
+            print("[INFO] CMMD: Áp dụng Augmentation cơ bản (không oversampling)...")
             X_train_np, y_train_np = generate_image_transforms(
                 X_train_np, y_train_np,
                 apply_elastic=cli_args.apply_elastic,
-                apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
-                apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha,
-                oversample=True
+                apply_mixup=cli_args.apply_mixup,
+                apply_cutmix=cli_args.apply_cutmix,
+                oversample=False # LUÔN LUÔN LÀ FALSE CHO CMMD
             )
-            # Khi đã oversampling, không cần dùng class weights nữa
-            print(f"[INFO] Kích thước tập train sau oversampling: {X_train_np.shape[0]} mẫu")
-
-        else:
-            print("\n[INFO] Chiến lược: Sử dụng Class Weights (nếu cần) và Augmentation cơ bản.")
-            # TÍNH CLASS WEIGHTS DỰA TRÊN TẬP TRAIN GỐC (TRƯỚC AUGMENTATION)
-            # Đây là cách làm đúng về mặt lý thuyết
-            class_weights = make_class_weights(y_train_numeric, num_classes=num_classes)
-            print(f"[INFO] Class weights đã được tính: {class_weights}")
-
-            # Nếu có cờ augmentation, chỉ áp dụng augmentation mà không thay đổi số lượng mẫu
-            if config.augment_data:
-                print("[INFO] Áp dụng data augmentation cho tập train...")
-                X_train_np, y_train_np = generate_image_transforms(
-                    X_train_np, y_train_np,
-                    apply_elastic=cli_args.apply_elastic,
-                    apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
-                    apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha,
-                    oversample=False # Quan trọng: chỉ tăng cường, không oversample
-                )
         
         # 4. CHUẨN BỊ DỮ LIỆU CUỐI CÙNG
         # Chuyển các tập validation và test sang one-hot
