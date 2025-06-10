@@ -585,6 +585,7 @@ def create_mobilenet_model(num_classes: int):
     # x = Dense(512, activation='relu', name="MobileNet_Dense_1")(x)
     x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.0005), name="MobileNet_Dense_1")(x)
     x = Dense(32, activation='relu', name="MobileNet_Dense_2")(x)
+    x = Dropout(0.3, name="MobileNet_Dropout_2")(x) # Giảm từ 0.5 xuống 0.3
 
     # Lớp output
     if num_classes == 2:

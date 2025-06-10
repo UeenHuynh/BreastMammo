@@ -1240,7 +1240,9 @@ def generate_image_transforms(images: np.ndarray, labels: np.ndarray,
     # --- BƯỚC 2: AUGMENTATION VÀ OVERSAMPLING ---
     basic_transforms = {
         'rotate': random_rotation, 'horizontal_flip': horizontal_flip,
-        'shear': random_shearing, 'gamma_correction': gamma_correction
+        'shear': random_shearing, 'gamma_correction': gamma_correction,
+        'random_noise': random_noise, # Thêm nhiễu
+        'random_zoom': random_zoom     # Thêm zoom
     }
     transform_keys = list(basic_transforms.keys())
 
