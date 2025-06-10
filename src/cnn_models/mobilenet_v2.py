@@ -581,9 +581,9 @@ def create_mobilenet_model(num_classes: int):
     x = GlobalAveragePooling2D(name="MobileNet_GlobalAvgPool")(x)
     
     random_seed_val = getattr(config, 'RANDOM_SEED', None) # Lấy seed từ config
-    x = Dropout(0.5, seed=random_seed_val, name="MobileNet_Dropout_1")(x)
+    x = Dropout(0.4, seed=random_seed_val, name="MobileNet_Dropout_1")(x)
     # x = Dense(512, activation='relu', name="MobileNet_Dense_1")(x)
-    x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.001), name="MobileNet_Dense_1")(x)
+    x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.0005), name="MobileNet_Dense_1")(x)
     x = Dense(32, activation='relu', name="MobileNet_Dense_2")(x)
 
     # Lớp output
