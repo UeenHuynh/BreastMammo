@@ -803,7 +803,7 @@ if __name__ == "__main__":
     # Adjusted choices for dataset to include others, assuming they are supported by data loading logic.
     parser.add_argument("--data_dir", type=str, help="Path to the root dataset directory (e.g., INbreast/INbreast, CMMD_data_root, etc.). Structure inside depends on the dataset.")
     parser.add_argument("-d", "--dataset", choices=["INbreast", "mini-MIAS", "mini-MIAS-binary", "CBIS-DDSM", "CMMD"], required=True, help="Dataset to use.")
-    parser.add_argument("--model_name_arg", "--model", dest="model_name_arg", choices=["CNN","VGG","VGG-common","ResNet","Inception","DenseNet","MobileNet"], required=True, help="Model backbone")
+    parser.add_argument("--model_name_arg", "--model", dest="model_name_arg", choices=["CNN","VGG","VGG-common","ResNet","Inception","DenseNet","MobileNet", "EfficientNet"], required=True, help="Model backbone")
     parser.add_argument("-r", "--runmode", choices=["train","test"], default="train", help="train or test")
     parser.add_argument("-lr", "--learning_rate", type=float, default=config.learning_rate, help="Learning rate")
     parser.add_argument("-b", "--batch_size", type=int, default=config.batch_size, help="Batch size")
