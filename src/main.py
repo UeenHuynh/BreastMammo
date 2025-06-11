@@ -779,7 +779,7 @@ def main_logic(cli_args):
         # Here, we re-initialize CnnModel's num_classes based on the loaded model.
         if cnn.num_classes != actual_num_classes_model :
             print(f"[INFO] Re-initializing CnnModel for loaded model with {actual_num_classes_model} classes (was {cnn.num_classes}).")
-            cnn = CnnModel(config.model, actual_num_classes_model) # Use model's actual classes
+            cnn = CnnModel(config.model, actual_num_classes_model, cli_args) # Use model's actual classes
         cnn.model = loaded_keras_model
 
         if X_test_np is None or y_test_np is None or X_test_np.size == 0:
