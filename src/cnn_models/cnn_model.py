@@ -32,7 +32,7 @@ from data_operations.data_preprocessing import flatten_to_slices
 from data_operations.data_transformations import focal_loss_factory
 
 class CnnModel:
-    def __init__(self, model_name: str, num_classes: int):
+    def __init__(self, model_name: str, num_classes: int, args):
         self.model_name  = model_name
         self.num_classes = num_classes
         self.history     = None
