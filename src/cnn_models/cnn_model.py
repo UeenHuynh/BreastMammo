@@ -50,8 +50,8 @@ class CnnModel:
             self._model = create_densenet121_model(num_classes)
         elif model_name == "MobileNet":
             self._model = create_mobilenet_model(num_classes)
-        elif model_name == "EfficientNet": # <<< THÊM KHỐI ELIF NÀY
-            self._model = create_efficientnet_model(num_classes)
+        elif model_name == "EfficientNet":
+            self._model = create_efficientnet_model(num_classes, weights_path=args.efficientnet_weights_path)
         elif model_name == "CNN":
             self._model = create_basic_cnn_model(num_classes)
         else:
