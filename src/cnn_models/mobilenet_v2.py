@@ -606,3 +606,4 @@ def create_mobilenet_model(num_classes: int):
         # final_model.summary(line_length=150)
             
     return final_model
+

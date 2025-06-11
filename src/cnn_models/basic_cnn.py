@@ -235,7 +235,7 @@ def create_basic_cnn_model(num_classes: int):
     model = Sequential(name="Basic_CNN_Adjusted")
 
     # Các lớp Convolutional (tích chập) và Pooling (gộp)
-    model.add(Conv2D(64, (5, 5), activation='relu', input_shape=(config.ROI_IMG_SIZE['HEIGHT'], config.ROI_IMG_SIZE['WIDTH'], 1), name="Conv1"))
+    model.add(Conv2D(64, (5, 5), activation='relu', name="Conv1"))
     model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool1"))
     model.add(Conv2D(32, (5, 5), activation='relu', padding='same', name="Conv2"))
     model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool2"))

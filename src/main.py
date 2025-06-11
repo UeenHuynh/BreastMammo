@@ -31,6 +31,7 @@ from data_operations.data_transformations import (
     generate_image_transforms
 )
 from cnn_models.cnn_model import CnnModel
+
 import argparse
 from tensorflow.keras import mixed_precision
 from utils import (load_trained_model, print_num_gpus_available,
