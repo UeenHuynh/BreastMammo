@@ -763,24 +763,54 @@ def main_logic(cli_args):
             cnn.evaluate_model(X_test_np, y_test_np, le, cls_type_eval, time.time() - start_time_train)
         else: print(f"[ERROR] Test data for {config.dataset} is empty or None. Cannot evaluate.")
 
+    # elif config.run_mode.lower() == "test":
+    #     print(f"[INFO] Running in TEST mode for {config.dataset}.")
+    #     # Model path might need to be dataset-specific if you train separate models
+    #     # loaded_keras_model = load_trained_model(model_name_prefix=f"{config.dataset}_{config.model}") # Example modification
+    #     loaded_keras_model = load_trained_model() # Example modification
+    #     if loaded_keras_model is None:
+    #         print(f"[ERROR] Failed to load trained model. Attempted with prefix: {config.dataset}_{config.model}")
+    #         raise FileNotFoundError("Failed to load trained model for testing.")
+        
+    #     output_neurons = loaded_keras_model.output_shape[-1]
+    #     actual_num_classes_model = output_neurons if output_neurons > 1 else 2 # Handle single neuron for binary
+
+    #     # If the loaded model's classes differ from what data expects, it could be an issue.
+    #     # Here, we re-initialize CnnModel's num_classes based on the loaded model.
+    #     if cnn.num_classes != actual_num_classes_model :
+    #         print(f"[INFO] Re-initializing CnnModel for loaded model with {actual_num_classes_model} classes (was {cnn.num_classes}).")
+    #         cnn = CnnModel(config.model, actual_num_classes_model) # Use model's actual classes
+    #     cnn.model = loaded_keras_model
+    # Trong hàm main_logic(cli_args)
     elif config.run_mode.lower() == "test":
         print(f"[INFO] Running in TEST mode for {config.dataset}.")
-        # Model path might need to be dataset-specific if you train separate models
-        # loaded_keras_model = load_trained_model(model_name_prefix=f"{config.dataset}_{config.model}") # Example modification
-        loaded_keras_model = load_trained_model() # Example modification
-        if loaded_keras_model is None:
-            print(f"[ERROR] Failed to load trained model. Attempted with prefix: {config.dataset}_{config.model}")
-            raise FileNotFoundError("Failed to load trained model for testing.")
         
-        output_neurons = loaded_keras_model.output_shape[-1]
-        actual_num_classes_model = output_neurons if output_neurons > 1 else 2 # Handle single neuron for binary
+        # Ưu tiên tải weight từ đường dẫn trực tiếp nếu được cung cấp
+        if cli_args.load_weights_path:
+            print(f"[INFO] Loading weights directly from path: {cli_args.load_weights_path}")
+            # Cần xây dựng kiến trúc model trước khi load weight
+            # Lấy num_classes từ dữ liệu test để đảm bảo khớp
+            y_test_numeric = np.argmax(y_test_np, axis=1) if y_test_np.ndim > 1 else y_test_np
+            num_classes_from_data = len(np.unique(y_test_numeric))
+            if num_classes_from_data < 2: num_classes_from_data = 2
 
-        # If the loaded model's classes differ from what data expects, it could be an issue.
-        # Here, we re-initialize CnnModel's num_classes based on the loaded model.
-        if cnn.num_classes != actual_num_classes_model :
-            print(f"[INFO] Re-initializing CnnModel for loaded model with {actual_num_classes_model} classes (was {cnn.num_classes}).")
-            cnn = CnnModel(config.model, actual_num_classes_model) # Use model's actual classes
-        cnn.model = loaded_keras_model
+            cnn = CnnModel(config.model, num_classes_from_data, cli_args)
+            cnn.model.load_weights(cli_args.load_weights_path)
+            print("[INFO] Weights loaded successfully from direct path.")
+
+        # Nếu không có đường dẫn trực tiếp, quay về logic cũ
+        else:
+            print("[INFO] No direct weights path provided. Using default load_trained_model() function.")
+            loaded_keras_model = load_trained_model()
+            if loaded_keras_model is None:
+                print(f"[ERROR] Failed to load trained model using default method.")
+                raise FileNotFoundError("Failed to load trained model for testing.")
+            
+            output_neurons = loaded_keras_model.output_shape[-1]
+            actual_num_classes_model = output_neurons if output_neurons > 1 else 2
+            
+            cnn = CnnModel(config.model, actual_num_classes_model, cli_args)
+            cnn.model = loaded_keras_model
 
         if X_test_np is None or y_test_np is None or X_test_np.size == 0:
             print(f"[ERROR] Test data for {config.dataset} is None or empty. Cannot evaluate."); return
@@ -851,7 +881,8 @@ if __name__ == "__main__":
     parser.add_argument("--mammogram_type", default="all", help="Mammogram type (e.g., CC, MLO), relevant if dataset loader uses it.")
     parser.add_argument("--efficientnet_weights_path", type=str, default=None,
                         help="Path to local EfficientNet .h5 weights file to avoid download issues.")
-
+    parser.add_argument("--load_weights_path", type=str, default=None,
+                        help="Direct path to a .weights.h5 file to load for testing.")
     args = parser.parse_args()
 
     # --- Data Directory Validation ---
