@@ -1043,6 +1043,7 @@ def crop_roi_image(data_dir):
     df = pd.read_csv(csv_path, header=None)
     for row in df.iterrows():
         # Skip normal cases.
+        image = preprocess_image(images_dir + '/' + row[1][0] + '.png') # <-- DÙNG images_dir Ở ĐÂY
         if str(row[1][4]) == 'nan':
             continue
         if str(row[1][4]) == '*NOT':
