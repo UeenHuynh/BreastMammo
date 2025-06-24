@@ -1039,7 +1039,7 @@ def crop_roi_image(data_dir):
     images_dir = data_dir.split("_")[0] + "_png"
 
     # df = pd.read_csv('/'.join(csv_dir.split('/')[:-1]) + '/data_description.csv', header=None)
-    csv_path = os.path.join(csv_dir, 'data_description.csv')
+    csv_path = os.path.join(csv_dir, 'data_description_binary.csv')
     df = pd.read_csv(csv_path, header=None)
     for row in df.iterrows():
         # Skip normal cases.
