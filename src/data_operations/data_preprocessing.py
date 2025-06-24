@@ -1027,70 +1027,165 @@ def calculate_class_weights(y_train, label_encoder):
     # Thay đổi từ return None thành return class_weights
     return class_weights
 
+# def crop_roi_image(data_dir):
+#     """
+#     Crops the images from the mini-MIAS dataset.
+#     Function originally written by Shuen-Jen and amended by Adam Jaamour.
+#     """
+#     images = list()
+#     labels = list()
+
+#     csv_dir = data_dir
+#     images_dir = data_dir.split("_")[0] + "_png"
+
+#     # df = pd.read_csv('/'.join(csv_dir.split('/')[:-1]) + '/data_description.csv', header=None)
+#     csv_path = os.path.join(csv_dir, 'data_description_binary.csv')
+#     df = pd.read_csv(csv_path, header=None)
+#     for row in df.iterrows():
+#         # Skip normal cases.
+#         image = preprocess_image(images_dir + '/' + row[1][0] + '.png') # <-- DÙNG images_dir Ở ĐÂY
+#         if str(row[1][4]) == 'nan':
+#             continue
+#         if str(row[1][4]) == '*NOT':
+#             continue
+
+#         # Process image.
+#         image = preprocess_image(images_dir + '/' + row[1][0] + '.png')
+
+#         # Abnormal case: crop around tumour.
+#         y2 = 0
+#         x2 = 0
+#         if row[1][2] != 'NORM':
+#             y1 = image.shape[1] - int(row[1][5]) - 112
+#             if y1 < 0:
+#                 y1 = 0
+#                 y2 = 224
+#             if y2 != 224:
+#                 y2 = image.shape[1] - int(row[1][5]) + 112
+#                 if y2 > image.shape[1]:
+#                     y2 = image.shape[1]
+#                     y1 = image.shape[1] - 224
+#             x1 = int(row[1][4]) - 112
+#             if x1 < 0:
+#                 x1 = 0
+#                 x2 = 224
+#             if x2 != 224:
+#                 x2 = int(row[1][4]) + 112
+#                 if x2 > image.shape[0]:
+#                     x2 = image.shape[0]
+#                     x1 = image.shape[0] - 224
+
+#         # Normal case: crop around centre of image.
+#         else:
+#             y1 = int(image.shape[1] / 2 - 112)
+#             y2 = int(image.shape[1] / 2 + 112)
+#             x1 = int(image.shape[0] / 2 - 112)
+#             x2 = int(image.shape[0] / 2 + 112)
+
+#         # Get label from CSV file.
+#         label = "normal"
+#         if str(row[1][3]) == 'B':
+#             label = "benign"
+#         elif str(row[1][3]) == 'M':
+#             label = "malignant"
+
+#         # Append image and label to lists.
+#         images.append(image[y1:y2, x1:x2, :])
+#         labels.append(label)
+
+#     return images, labels
+
+# Đặt đoạn code này vào file: data_operations/data_preprocessing.py
+# THAY THẾ TOÀN BỘ HÀM CŨ
+
 def crop_roi_image(data_dir):
     """
-    Crops the images from the mini-MIAS dataset.
-    Function originally written by Shuen-Jen and amended by Adam Jaamour.
+    Crops the images from the mini-MIAS dataset using a CSV for ROI info.
+    This is a revised, more robust version.
     """
     images = list()
     labels = list()
 
-    csv_dir = data_dir
-    images_dir = data_dir.split("_")[0] + "_png"
+    # --- SỬA LỖI 1: Tìm file CSV một cách chính xác ---
+    # Đường dẫn đến file CSV giờ sẽ được tìm bên TRONG data_dir.
+    csv_path = os.path.join(data_dir, 'data_description.csv')
+    
+    # --- SỬA LỖI 2: Tìm thư mục chứa ảnh PNG một cách chính xác ---
+    # Giả định thư mục chứa ảnh PNG gốc cũng nằm bên TRONG data_dir.
+    # Bạn có thể đổi tên 'all-mias-png' cho đúng với tên thư mục thực tế của bạn.
+    images_folder_name = 'all-mias-png' 
+    images_path = os.path.join(data_dir, images_folder_name)
 
-    # df = pd.read_csv('/'.join(csv_dir.split('/')[:-1]) + '/data_description.csv', header=None)
-    csv_path = os.path.join(csv_dir, 'data_description_binary.csv')
-    df = pd.read_csv(csv_path, header=None)
+    print(f"[INFO ROI Mode] Reading CSV from: {csv_path}")
+    print(f"[INFO ROI Mode] Looking for PNG images in: {images_path}")
+    
+    try:
+        df = pd.read_csv(csv_path, header=None)
+    except FileNotFoundError:
+        print(f"[CRITICAL ERROR] The file 'data_description.csv' was not found in '{data_dir}'.")
+        print("Please ensure the CSV file is inside the directory you provided to --data_dir.")
+        # Trả về list rỗng để chương trình báo lỗi một cách an toàn
+        return [], []
+
+    if not os.path.isdir(images_path):
+        print(f"[CRITICAL ERROR] The image directory '{images_folder_name}' was not found in '{data_dir}'.")
+        print("Please ensure the folder with original PNGs is inside the directory provided to --data_dir.")
+        return [], []
+
+    # Vòng lặp xử lý từng dòng trong file CSV
     for row in df.iterrows():
-        # Skip normal cases.
-        image = preprocess_image(images_dir + '/' + row[1][0] + '.png') # <-- DÙNG images_dir Ở ĐÂY
-        if str(row[1][4]) == 'nan':
-            continue
-        if str(row[1][4]) == '*NOT':
+        # Bỏ qua các trường hợp bình thường (Normal) không có ROI
+        if str(row[1][4]) == 'nan' or str(row[1][4]) == '*NOT':
             continue
 
-        # Process image.
-        image = preprocess_image(images_dir + '/' + row[1][0] + '.png')
+        # Tạo đường dẫn đầy đủ và chính xác tới file ảnh
+        image_ref = row[1][0] # Ví dụ: 'mdb001'
+        full_image_path = os.path.join(images_path, f"{image_ref}.png")
 
-        # Abnormal case: crop around tumour.
+        # Tải ảnh gốc (ảnh to chưa cắt)
+        try:
+            image = preprocess_image(full_image_path)
+        except FileNotFoundError:
+            print(f"  [WARNING] Image not found, skipping: {full_image_path}")
+            continue
+
+        # Logic cắt ảnh xung quanh khối u (giữ nguyên logic gốc)
         y2 = 0
         x2 = 0
         if row[1][2] != 'NORM':
-            y1 = image.shape[1] - int(row[1][5]) - 112
+            y1 = image.shape[0] - int(row[1][5]) - 112 # Sửa lại: shape[0] là chiều cao (y)
             if y1 < 0:
                 y1 = 0
                 y2 = 224
             if y2 != 224:
-                y2 = image.shape[1] - int(row[1][5]) + 112
-                if y2 > image.shape[1]:
-                    y2 = image.shape[1]
-                    y1 = image.shape[1] - 224
+                y2 = image.shape[0] - int(row[1][5]) + 112
+                if y2 > image.shape[0]:
+                    y2 = image.shape[0]
+                    y1 = image.shape[0] - 224
+
             x1 = int(row[1][4]) - 112
             if x1 < 0:
                 x1 = 0
                 x2 = 224
             if x2 != 224:
                 x2 = int(row[1][4]) + 112
-                if x2 > image.shape[0]:
-                    x2 = image.shape[0]
-                    x1 = image.shape[0] - 224
+                if x2 > image.shape[1]:
+                    x2 = image.shape[1]
+                    x1 = image.shape[1] - 224
+        else: # Trường hợp này hiếm khi xảy ra vì đã lọc ở trên
+            y1, y2 = int(image.shape[0]/2 - 112), int(image.shape[0]/2 + 112)
+            x1, x2 = int(image.shape[1]/2 - 112), int(image.shape[1]/2 + 112)
 
-        # Normal case: crop around centre of image.
-        else:
-            y1 = int(image.shape[1] / 2 - 112)
-            y2 = int(image.shape[1] / 2 + 112)
-            x1 = int(image.shape[0] / 2 - 112)
-            x2 = int(image.shape[0] / 2 + 112)
-
-        # Get label from CSV file.
-        label = "normal"
+        # Lấy nhãn từ file CSV
+        label = "Normal" # Mặc định
         if str(row[1][3]) == 'B':
-            label = "benign"
+            label = "Benign"
         elif str(row[1][3]) == 'M':
-            label = "malignant"
+            label = "Malignant"
 
-        # Append image and label to lists.
-        images.append(image[y1:y2, x1:x2, :])
+        # Cắt ảnh và thêm vào danh sách
+        cropped_image = image[y1:y2, x1:x2]
+        images.append(cropped_image)
         labels.append(label)
 
     return images, labels
