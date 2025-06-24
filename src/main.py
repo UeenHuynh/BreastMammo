@@ -533,6 +533,41 @@ def main_logic(cli_args):
         if y_train_for_weights.size > 0: class_weights = make_class_weights(y_train_for_weights, num_classes)
         else: class_weights = None
 
+        # Đặt đoạn code này ngay sau khối tính class_weights
+
+        # --- BƯỚC CUỐI CÙNG: ÁP DỤNG AUGMENTATION ---
+        if cli_args.apply_oversampling:
+            print(f"\n[INFO] {config.dataset}: Áp dụng chiến lược Oversampling qua augmentation...")
+            # Khi oversampling, thường không cần class_weights nữa
+            class_weights = None 
+            X_train_np, y_train_np = generate_image_transforms(
+                X_train_np, y_train_np,
+                apply_elastic=cli_args.apply_elastic,
+                apply_mixup=cli_args.apply_mixup,
+                apply_cutmix=cli_args.apply_cutmix,
+                oversample=True
+            )
+        else:
+            # Nếu không oversampling, ta giữ lại class_weights đã tính
+            # và chỉ áp dụng augmentation cơ bản nếu có cờ --apply_...
+            if config.augment_data:
+                print(f"\n[INFO] {config.dataset}: Áp dụng các phép augmentation cơ bản...")
+                X_train_np, y_train_np = generate_image_transforms(
+                    X_train_np, y_train_np,
+                    apply_elastic=cli_args.apply_elastic,
+                    apply_mixup=cli_args.apply_mixup,
+                    apply_cutmix=cli_args.apply_cutmix,
+                    oversample=False
+                )
+
+        # Đảm bảo kiểu dữ liệu cuối cùng là float32 trước khi đưa vào model
+        X_train_np = X_train_np.astype(np.float32)
+        y_train_np = y_train_np.astype(np.float32)
+        X_val_np = X_val_np.astype(np.float32)
+        y_val_np = y_val_np.astype(np.float32)
+        X_test_np = X_test_np.astype(np.float32)
+        y_test_np = y_test_np.astype(np.float32)
+        
     # --- Xử lý cho CBIS-DDSM ---
     elif config.dataset.upper() == "CBIS-DDSM":
         # Assuming import functions return X_train, y_train_scalar, X_test, y_test_scalar
