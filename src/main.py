@@ -493,10 +493,10 @@ def main_logic(cli_args):
         y_test_np = y_test_np.astype(np.float32)
     # --- Xử lý cho mini-MIAS ---
     # elif config.dataset.upper() in ["MINI-MIAS", "MINI-MIAS-BINARY"]:
-    elif args.dataset.upper() == ["MINI-MIAS", "MINI-MIAS-BINARY"] and DATA_ROOT_BREAST and os.path.isdir(os.path.join(DATA_ROOT_BREAST, ["MINI-MIAS", "MINI-MIAS-BINARY"])):
-        args.data_dir = os.path.join(DATA_ROOT_BREAST, "INbreast", "INbreast")
-        print(f"[INFO] Using default DATA_ROOT_BREAST for INbreast. Effective data_dir: {args.data_dir}")
-
+    elif config.dataset.upper() in ["MINI-MIAS", "MINI-MIAS-BINARY"]:
+        print(f"[INFO] Bắt đầu quy trình xử lý cho bộ dữ liệu {config.dataset}...")
+    # Dòng này nhận đường dẫn từ tham số --data_dir
+        current_data_dir = cli_args.data_dir 
         # Assuming import_minimias_dataset returns X, y (scalar labels)
         # And current_data_dir is expected to point to the root of mini-MIAS data structured as needed by the import function.
         # If mini-MIAS path is fixed, use os.path.join(DATA_ROOT_BREAST, config.dataset) or adjust current_data_dir logic.
