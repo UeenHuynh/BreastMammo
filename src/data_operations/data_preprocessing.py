@@ -904,42 +904,104 @@ def calculate_class_weights(y_train, label_encoder):
                                                 flat)
     return {i: w for i, w in enumerate(weights)}
 
-def import_cbisddsm_training_dataset(label_encoder):
+# def import_cbisddsm_training_dataset(label_encoder):
+#     """
+#     Import the dataset getting the image paths (downloaded on BigTMP) and encoding the labels.
+#     Originally written as a group for the common pipeline. Later amended by Adam Jaamour.
+#     :param label_encoder: The label encoder.
+#     :return: Two arrays, one for the image paths and one for the encoded labels.
+#     """
+#     print("Importing CBIS-DDSM training set")
+#     cbis_ddsm_path = str()
+#     if config.mammogram_type == "calc":
+#         cbis_ddsm_path = "../data/CBIS-DDSM/calc-training.csv"
+#     elif config.mammogram_type == "mass":
+#         cbis_ddsm_path = "../data/CBIS-DDSM/mass-training.csv"
+#     else:
+#         cbis_ddsm_path = "../data/CBIS-DDSM/training.csv"
+#     df = pd.read_csv(cbis_ddsm_path)
+#     list_IDs = df['img_path'].values
+#     labels = encode_labels(df['label'].values, label_encoder)
+#     return list_IDs, labels
+
+
+# def import_cbisddsm_testing_dataset(label_encoder):
+#     """
+#     Import the testing dataset getting the image paths (downloaded on BigTMP) and encoding the labels.
+#     :param label_encoder: The label encoder.
+#     :return: Two arrays, one for the image paths and one for the encoded labels.
+#     """
+#     print("Importing CBIS-DDSM testing set")
+#     cbis_ddsm_path = str()
+#     if config.mammogram_type == "calc":
+#         cbis_ddsm_path = "../data/CBIS-DDSM/calc-test.csv"
+#     elif config.mammogram_type == "mass":
+#         cbis_ddsm_path = "../data/CBIS-DDSM/mass-test.csv"
+#     else:
+#         cbis_ddsm_path = "../data/CBIS-DDSM/testing.csv"
+#     df = pd.read_csv(cbis_ddsm_path)
+#     list_IDs = df['img_path'].values
+#     labels = encode_labels(df['label'].values, label_encoder)
+#     return list_IDs, labels
+
+# SỬA LỖI 1: Thêm tham số 'csv_dir_path' để nhận đường dẫn đến thư mục CSV.
+def import_cbisddsm_training_dataset(label_encoder, csv_dir_path):
     """
-    Import the dataset getting the image paths (downloaded on BigTMP) and encoding the labels.
-    Originally written as a group for the common pipeline. Later amended by Adam Jaamour.
-    :param label_encoder: The label encoder.
-    :return: Two arrays, one for the image paths and one for the encoded labels.
+    Tải tập huấn luyện CBIS-DDSM bằng cách đọc đường dẫn ảnh và mã hóa nhãn.
+    Hàm đã được sửa để nhận đường dẫn thư mục CSV động.
+    :param label_encoder: Bộ mã hóa nhãn.
+    :param csv_dir_path: Đường dẫn đến thư mục chứa các file CSV đã được xử lý.
+    :return: Hai mảng, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
     """
     print("Importing CBIS-DDSM training set")
-    cbis_ddsm_path = str()
+    
+    # SỬA LỖI 2: Sử dụng os.path.join để tạo đường dẫn file linh hoạt.
     if config.mammogram_type == "calc":
-        cbis_ddsm_path = "../data/CBIS-DDSM/calc-training.csv"
+        csv_path = os.path.join(csv_dir_path, "calc_case_description_train_set.csv")
     elif config.mammogram_type == "mass":
-        cbis_ddsm_path = "../data/CBIS-DDSM/mass-training.csv"
+        csv_path = os.path.join(csv_dir_path, "mass_case_description_train_set.csv")
     else:
-        cbis_ddsm_path = "../data/CBIS-DDSM/training.csv"
-    df = pd.read_csv(cbis_ddsm_path)
+        # Giả sử chúng ta sẽ tạo một file training.csv tổng hợp sau này
+        # Hoặc bạn có thể đọc và gộp 'calc-training.csv' và 'mass-training.csv' ở đây
+        # Tạm thời, chúng ta sẽ gộp cả hai.
+        calc_df = pd.read_csv(os.path.join(csv_dir_path, "calc_case_description_train_set.csv"))
+        mass_df = pd.read_csv(os.path.join(csv_dir_path, "mass_case_description_train_set.csv"))
+        df = pd.concat([calc_df, mass_df], ignore_index=True)
+        list_IDs = df['img_path'].values
+        labels = encode_labels(df['label'].values, label_encoder)
+        return list_IDs, labels
+
+    df = pd.read_csv(csv_path)
     list_IDs = df['img_path'].values
     labels = encode_labels(df['label'].values, label_encoder)
     return list_IDs, labels
 
 
-def import_cbisddsm_testing_dataset(label_encoder):
+# SỬA LỖI 1: Thêm tham số 'csv_dir_path'
+def import_cbisddsm_testing_dataset(label_encoder, csv_dir_path):
     """
-    Import the testing dataset getting the image paths (downloaded on BigTMP) and encoding the labels.
-    :param label_encoder: The label encoder.
-    :return: Two arrays, one for the image paths and one for the encoded labels.
+    Tải tập kiểm thử CBIS-DDSM.
+    Hàm đã được sửa để nhận đường dẫn thư mục CSV động.
+    :param label_encoder: Bộ mã hóa nhãn.
+    :param csv_dir_path: Đường dẫn đến thư mục chứa các file CSV đã được xử lý.
+    :return: Hai mảng, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
     """
     print("Importing CBIS-DDSM testing set")
-    cbis_ddsm_path = str()
+    
+    # SỬA LỖI 2: Sử dụng os.path.join
     if config.mammogram_type == "calc":
-        cbis_ddsm_path = "../data/CBIS-DDSM/calc-test.csv"
+        csv_path = os.path.join(csv_dir_path, "calc_case_description_test_set.csv")
     elif config.mammogram_type == "mass":
-        cbis_ddsm_path = "../data/CBIS-DDSM/mass-test.csv"
+        csv_path = os.path.join(csv_dir_path, "mass_case_description_test_set.csv")
     else:
-        cbis_ddsm_path = "../data/CBIS-DDSM/testing.csv"
-    df = pd.read_csv(cbis_ddsm_path)
+        calc_df = pd.read_csv(os.path.join(csv_dir_path, "calc_case_description_test_set.csv"))
+        mass_df = pd.read_csv(os.path.join(csv_dir_path, "mass_case_description_test_set.csv"))
+        df = pd.concat([calc_df, mass_df], ignore_index=True)
+        list_IDs = df['img_path'].values
+        labels = encode_labels(df['label'].values, label_encoder)
+        return list_IDs, labels
+        
+    df = pd.read_csv(csv_path)
     list_IDs = df['img_path'].values
     labels = encode_labels(df['label'].values, label_encoder)
     return list_IDs, labels
