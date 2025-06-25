@@ -577,8 +577,8 @@ def main_logic(cli_args):
         print(f"[INFO] Loading CBIS-DDSM. Data directory: {current_data_dir}")
         # The import functions should handle 'le' for encoding.
         # Let's assume they return scalar labels that need one-hot encoding.
-        _X_train_np, _y_train_scalar = import_cbisddsm_training_dataset(le, data_root_dir=current_data_dir)
-        _X_test_np,  _y_test_scalar  = import_cbisddsm_testing_dataset(le, data_root_dir=current_data_dir)
+        _X_train_np, _y_train_scalar = import_cbisddsm_training_dataset(le, csv_dir_path=current_data_dir)
+        _X_test_np,  _y_test_scalar  = import_cbisddsm_testing_dataset(le, csv_dir_path=current_data_dir)
 
         if _X_train_np.size == 0 or _X_test_np.size == 0:
             print("[ERROR] CBIS-DDSM training or testing data not loaded. Exiting."); return
