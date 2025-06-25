@@ -944,68 +944,68 @@ def calculate_class_weights(y_train, label_encoder):
 #     labels = encode_labels(df['label'].values, label_encoder)
 #     return list_IDs, labels
 
-# SỬA LỖI 1: Thêm tham số 'csv_dir_path' để nhận đường dẫn đến thư mục CSV.
-def import_cbisddsm_training_dataset(label_encoder, csv_dir_path):
+# SỬA LỖI VÀ ĐƠN GIẢN HÓA HÀM TẢI DỮ LIỆU HUẤN LUYỆN
+def import_cbisddsm_training_dataset(label_encoder):
     """
-    Tải tập huấn luyện CBIS-DDSM bằng cách đọc đường dẫn ảnh và mã hóa nhãn.
-    Hàm đã được sửa để nhận đường dẫn thư mục CSV động.
-    :param label_encoder: Bộ mã hóa nhãn.
-    :param csv_dir_path: Đường dẫn đến thư mục chứa các file CSV đã được xử lý.
-    :return: Hai mảng, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
+    Tải tập huấn luyện CBIS-DDSM từ tệp training.csv đã được tiền xử lý.
+    Tệp này chứa đường dẫn ảnh đầy đủ và nhãn bệnh lý.
+    :param label_encoder: Bộ mã hóa nhãn đã được khởi tạo.
+    :return: Hai mảng numpy, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
     """
-    print("Importing CBIS-DDSM training set")
+    print("Importing pre-processed CBIS-DDSM training set...")
     
-    # SỬA LỖI 2: Sử dụng os.path.join để tạo đường dẫn file linh hoạt.
-    if config.mammogram_type == "calc":
-        csv_path = os.path.join(csv_dir_path, "calc_case_description_train_set.csv")
-    elif config.mammogram_type == "mass":
-        csv_path = os.path.join(csv_dir_path, "mass_case_description_train_set.csv")
-    else:
-        # Giả sử chúng ta sẽ tạo một file training.csv tổng hợp sau này
-        # Hoặc bạn có thể đọc và gộp 'calc-training.csv' và 'mass-training.csv' ở đây
-        # Tạm thời, chúng ta sẽ gộp cả hai.
-        calc_df = pd.read_csv(os.path.join(csv_dir_path, "calc_case_description_train_set.csv"))
-        mass_df = pd.read_csv(os.path.join(csv_dir_path, "mass_case_description_train_set.csv"))
-        df = pd.concat([calc_df, mass_df], ignore_index=True)
-        list_IDs = df['img_path'].values
-        labels = encode_labels(df['label'].values, label_encoder)
-        return list_IDs, labels
-
-    df = pd.read_csv(csv_path)
-    list_IDs = df['img_path'].values
-    labels = encode_labels(df['label'].values, label_encoder)
-    return list_IDs, labels
-
-
-# SỬA LỖI 1: Thêm tham số 'csv_dir_path'
-def import_cbisddsm_testing_dataset(label_encoder, csv_dir_path):
-    """
-    Tải tập kiểm thử CBIS-DDSM.
-    Hàm đã được sửa để nhận đường dẫn thư mục CSV động.
-    :param label_encoder: Bộ mã hóa nhãn.
-    :param csv_dir_path: Đường dẫn đến thư mục chứa các file CSV đã được xử lý.
-    :return: Hai mảng, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
-    """
-    print("Importing CBIS-DDSM testing set")
-    
-    # SỬA LỖI 2: Sử dụng os.path.join
-    if config.mammogram_type == "calc":
-        csv_path = os.path.join(csv_dir_path, "calc_case_description_test_set.csv")
-    elif config.mammogram_type == "mass":
-        csv_path = os.path.join(csv_dir_path, "mass_case_description_test_set.csv")
-    else:
-        calc_df = pd.read_csv(os.path.join(csv_dir_path, "calc_case_description_test_set.csv"))
-        mass_df = pd.read_csv(os.path.join(csv_dir_path, "mass_case_description_test_set.csv"))
-        df = pd.concat([calc_df, mass_df], ignore_index=True)
-        list_IDs = df['img_path'].values
-        labels = encode_labels(df['label'].values, label_encoder)
-        return list_IDs, labels
+    try:
+        # Đường dẫn được lấy từ tệp config.py
+        csv_path = config.training_csv 
+        df = pd.read_csv(csv_path)
         
-    df = pd.read_csv(csv_path)
-    list_IDs = df['img_path'].values
-    labels = encode_labels(df['label'].values, label_encoder)
-    return list_IDs, labels
+        # Lấy danh sách đường dẫn ảnh từ cột 'image_file_path'
+        list_IDs = df['image_file_path'].values
+        
+        # Mã hóa nhãn từ cột 'pathology'
+        labels_scalar = encode_labels(df['pathology'].values, label_encoder)
+        
+        print(f"   -> Loaded {len(list_IDs)} training samples from {csv_path}")
+        return list_IDs, labels_scalar
+        
+    except FileNotFoundError:
+        print(f"[ERROR] Training CSV not found at: {config.training_csv}")
+        return pd.Series(dtype='str'), pd.Series(dtype='int') # Trả về mảng rỗng
+    except Exception as e:
+        print(f"[ERROR] An error occurred in import_cbisddsm_training_dataset: {e}")
+        return pd.Series(dtype='str'), pd.Series(dtype='int')
 
+
+# SỬA LỖI VÀ ĐƠN GIẢN HÓA HÀM TẢI DỮ LIỆU KIỂM THỬ
+def import_cbisddsm_testing_dataset(label_encoder):
+    """
+    Tải tập kiểm thử CBIS-DDSM từ tệp testing.csv đã được tiền xử lý.
+    :param label_encoder: Bộ mã hóa nhãn.
+    :return: Hai mảng numpy, một cho đường dẫn ảnh và một cho nhãn đã mã hóa.
+    """
+    print("Importing pre-processed CBIS-DDSM testing set...")
+    
+    try:
+        # Đường dẫn được lấy từ tệp config.py
+        csv_path = config.testing_csv
+        df = pd.read_csv(csv_path)
+        
+        # Lấy danh sách đường dẫn ảnh từ cột 'image_file_path'
+        list_IDs = df['image_file_path'].values
+        
+        # Mã hóa nhãn từ cột 'pathology'
+        labels_scalar = encode_labels(df['pathology'].values, label_encoder)
+        
+        print(f"   -> Loaded {len(list_IDs)} testing samples from {csv_path}")
+        return list_IDs, labels_scalar
+
+    except FileNotFoundError:
+        print(f"[ERROR] Testing CSV not found at: {config.testing_csv}")
+        return pd.Series(dtype='str'), pd.Series(dtype='int')
+    except Exception as e:
+        print(f"[ERROR] An error occurred in import_cbisddsm_testing_dataset: {e}")
+        return pd.Series(dtype='str'), pd.Series(dtype='int')
+    
 def preprocess_image(image_path: str) -> np.ndarray:
     """
     Pre-processing steps:

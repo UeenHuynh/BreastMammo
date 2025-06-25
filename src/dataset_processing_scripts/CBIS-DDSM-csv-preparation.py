@@ -90,98 +90,167 @@ import pandas as pd
 import os
 import pandas as pd
 
-def main() -> None:
-    """
-    Script tiền xử lý cho bộ dữ liệu CBIS-DDSM (đã điều chỉnh cho cấu trúc thư mục mới).
-    - Đọc các file CSV gốc chứa thông tin bệnh lý.
-    - Tạo một DataFrame ánh xạ từ patient_id và các thông tin khác tới đường dẫn ảnh jpeg thực tế.
-    - Hợp nhất hai nguồn thông tin trên để tạo ra các file CSV cuối cùng cho việc huấn luyện và kiểm thử.
-    """
-    # --- THAY ĐỔI CÁC ĐƯỜNG DẪN NÀY CHO PHÙ HỢP VỚI MÁY CỦA BẠN ---
-    base_path = '/kaggle/input/breastdata'
+# def main() -> None:
+#     """
+#     Script tiền xử lý cho bộ dữ liệu CBIS-DDSM (đã điều chỉnh cho cấu trúc thư mục mới).
+#     - Đọc các file CSV gốc chứa thông tin bệnh lý.
+#     - Tạo một DataFrame ánh xạ từ patient_id và các thông tin khác tới đường dẫn ảnh jpeg thực tế.
+#     - Hợp nhất hai nguồn thông tin trên để tạo ra các file CSV cuối cùng cho việc huấn luyện và kiểm thử.
+#     """
+#     # --- THAY ĐỔI CÁC ĐƯỜNG DẪN NÀY CHO PHÙ HỢP VỚI MÁY CỦA BẠN ---
+#     base_path = '/home/neeyuhuynh/Desktop/Breast-Cancer-Detection-Mammogram-Deep-Learning-Publication'
     
-    # Đường dẫn đến thư mục chứa các file CSV gốc (mass_case_description_... và calc_case_description_...)
-    csv_root = os.path.join(base_path, 'data/CBIS-DDSM/csv')
+#     # Đường dẫn đến thư mục chứa các file CSV gốc (mass_case_description_... và calc_case_description_...)
+#     csv_root = os.path.join(base_path, 'data/CBIS-DDSM/csv')
     
-    # Đường dẫn đến thư mục chứa các ảnh đã chuyển đổi sang jpeg
-    img_root = os.path.join(base_path, 'data/CBIS-DDSM/jpeg')
+#     # Đường dẫn đến thư mục chứa các ảnh đã chuyển đổi sang jpeg
+#     img_root = os.path.join(base_path, 'data/CBIS-DDSM/jpeg')
     
-    # Đường dẫn để lưu các file CSV đầu ra (sẽ được tạo nếu chưa có)
-    csv_output_path = os.path.join(base_path, 'data/CBIS-DDSM/processed_csv')
-    if not os.path.exists(csv_output_path):
-        os.makedirs(csv_output_path)
-    # --- KẾT THÚC PHẦN THAY ĐỔI ---
+#     # Đường dẫn để lưu các file CSV đầu ra (sẽ được tạo nếu chưa có)
+#     csv_output_path = os.path.join(base_path, 'data/CBIS-DDSM/processed_csv')
+#     if not os.path.exists(csv_output_path):
+#         os.makedirs(csv_output_path)
+#     # --- KẾT THÚC PHẦN THAY ĐỔI ---
 
-    # Đọc file dicom_info.csv để ánh xạ thông tin bệnh nhân tới đường dẫn ảnh
-    # Giả sử file này chứa thông tin liên kết giữa mô tả và ảnh thực tế
-    try:
-        dicom_info_df = pd.read_csv(os.path.join(csv_root, 'dicom_info.csv'))
-        # Tạo cột 'image file path' để khớp với các file CSV khác
-        dicom_info_df['image file path'] = dicom_info_df['image_path'].apply(
-            lambda x: x.replace('CBIS-DDSM/', '').replace('.dcm', '')
-        )
-        # Tạo cột 'full_jpeg_path'
-        dicom_info_df['full_jpeg_path'] = dicom_info_df['image_path'].apply(
-            lambda x: os.path.join(img_root, x.replace('.dcm', '.jpg'))
-        )
-    except FileNotFoundError:
-        print(f"Lỗi: Không tìm thấy file 'dicom_info.csv' tại '{csv_root}'. File này rất quan trọng để liên kết dữ liệu.")
-        return
+#     # Đọc file dicom_info.csv để ánh xạ thông tin bệnh nhân tới đường dẫn ảnh
+#     # Giả sử file này chứa thông tin liên kết giữa mô tả và ảnh thực tế
+#     try:
+#         dicom_info_df = pd.read_csv(os.path.join(csv_root, 'dicom_info.csv'))
+#         # Tạo cột 'image file path' để khớp với các file CSV khác
+#         dicom_info_df['image file path'] = dicom_info_df['image_path'].apply(
+#             lambda x: x.replace('CBIS-DDSM/', '').replace('.dcm', '')
+#         )
+#         # Tạo cột 'full_jpeg_path'
+#         dicom_info_df['full_jpeg_path'] = dicom_info_df['image_path'].apply(
+#             lambda x: os.path.join(img_root, x.replace('.dcm', '.jpg'))
+#         )
+#     except FileNotFoundError:
+#         print(f"Lỗi: Không tìm thấy file 'dicom_info.csv' tại '{csv_root}'. File này rất quan trọng để liên kết dữ liệu.")
+#         return
 
-    # Từ điển ánh xạ loại dữ liệu và tên file CSV
-    type_dict = {'Calc-Test': 'calc_case_description_test_set.csv',
-                 'Calc-Training': 'calc_case_description_train_set.csv',
-                 'Mass-Test': 'mass_case_description_test_set.csv',
-                 'Mass-Training': 'mass_case_description_train_set.csv'}
+#     # Từ điển ánh xạ loại dữ liệu và tên file CSV
+#     type_dict = {'Calc-Test': 'calc_case_description_test_set.csv',
+#                  'Calc-Training': 'calc_case_description_train_set.csv',
+#                  'Mass-Test': 'mass_case_description_test_set.csv',
+#                  'Mass-Training': 'mass_case_description_train_set.csv'}
 
-    for t, csv_file in type_dict.items():
-        print(f"Đang xử lý: {t}")
-        try:
-            df_csv = pd.read_csv(os.path.join(csv_root, csv_file))
-        except FileNotFoundError:
-            print(f"Cảnh báo: Không tìm thấy file {csv_file}. Bỏ qua...")
-            continue
+#     for t, csv_file in type_dict.items():
+#         print(f"Đang xử lý: {t}")
+#         try:
+#             df_csv = pd.read_csv(os.path.join(csv_root, csv_file))
+#         except FileNotFoundError:
+#             print(f"Cảnh báo: Không tìm thấy file {csv_file}. Bỏ qua...")
+#             continue
 
-        # Chuẩn hóa các giá trị bệnh lý
-        df_csv['pathology'] = df_csv['pathology'].replace('BENIGN_WITHOUT_CALLBACK', 'BENIGN')
+#         # Chuẩn hóa các giá trị bệnh lý
+#         df_csv['pathology'] = df_csv['pathology'].replace('BENIGN_WITHOUT_CALLBACK', 'BENIGN')
 
-        # Lọc ra các trường hợp có nhiều hơn một bệnh lý
-        df_cnt = df_csv.groupby('image file path')['pathology'].nunique().reset_index()
-        multi_pathology_cases = df_cnt[df_cnt['pathology'] != 1]['image file path']
-        df_csv = df_csv[~df_csv['image file path'].isin(multi_pathology_cases)]
+#         # Lọc ra các trường hợp có nhiều hơn một bệnh lý
+#         df_cnt = df_csv.groupby('image file path')['pathology'].nunique().reset_index()
+#         multi_pathology_cases = df_cnt[df_cnt['pathology'] != 1]['image file path']
+#         df_csv = df_csv[~df_csv['image file path'].isin(multi_pathology_cases)]
         
-        # Xóa các bản ghi trùng lặp
-        df_csv = df_csv.drop_duplicates(subset=['image file path'], keep='first')
+#         # Xóa các bản ghi trùng lặp
+#         df_csv = df_csv.drop_duplicates(subset=['image file path'], keep='first')
 
-        # Hợp nhất với thông tin đường dẫn ảnh đầy đủ
-        # Chúng ta cần một cột chung để hợp nhất, ở đây là 'image file path'
-        df_merged = pd.merge(df_csv, dicom_info_df[['image file path', 'full_jpeg_path']], 
-                             how='inner', on='image file path')
+#         # Hợp nhất với thông tin đường dẫn ảnh đầy đủ
+#         # Chúng ta cần một cột chung để hợp nhất, ở đây là 'image file path'
+#         df_merged = pd.merge(df_csv, dicom_info_df[['image file path', 'full_jpeg_path']], 
+#                              how='inner', on='image file path')
 
-        if df_merged.empty:
-            print(f"Cảnh báo: Không có dữ liệu nào được hợp nhất cho {t}. Kiểm tra lại nội dung các file CSV.")
-            continue
+#         if df_merged.empty:
+#             print(f"Cảnh báo: Không có dữ liệu nào được hợp nhất cho {t}. Kiểm tra lại nội dung các file CSV.")
+#             continue
             
-        # Tạo cột 'label' và chỉ giữ lại các cột cần thiết
-        final_df = df_merged[['full_jpeg_path', 'pathology']].copy()
-        final_df.rename(columns={'full_jpeg_path': 'img_path', 'pathology': 'label'}, inplace=True)
+#         # Tạo cột 'label' và chỉ giữ lại các cột cần thiết
+#         final_df = df_merged[['full_jpeg_path', 'pathology']].copy()
+#         final_df.rename(columns={'full_jpeg_path': 'img_path', 'pathology': 'label'}, inplace=True)
 
-        # Lưu file CSV đầu ra
-        output_filename = os.path.join(csv_output_path, t.lower() + '.csv')
-        final_df.to_csv(output_filename, index=False)
+#         # Lưu file CSV đầu ra
+#         output_filename = os.path.join(csv_output_path, t.lower() + '.csv')
+#         final_df.to_csv(output_filename, index=False)
 
-        print(f'  -> Đã tạo file: {output_filename}')
-        print(f'  -> Số lượng mẫu: {len(final_df)}')
-        if not multi_pathology_cases.empty:
-            print(f'  -> Các trường hợp có nhiều bệnh lý đã bị loại bỏ: {len(multi_pathology_cases)}')
-        print()
+#         print(f'  -> Đã tạo file: {output_filename}')
+#         print(f'  -> Số lượng mẫu: {len(final_df)}')
+#         if not multi_pathology_cases.empty:
+#             print(f'  -> Các trường hợp có nhiều bệnh lý đã bị loại bỏ: {len(multi_pathology_cases)}')
+#         print()
 
-    print('Hoàn tất tiền xử lý CSV cho bộ dữ liệu CBIS-DDSM.')
+#     print('Hoàn tất tiền xử lý CSV cho bộ dữ liệu CBIS-DDSM.')
 
 
-if __name__ == '__main__':
-    main()
-# ----------------------------------
+# if __name__ == '__main__':
+#     main()
+# --- Cấu hình đường dẫn ---
+# Để đơn giản, hãy đảm bảo TẤT CẢ các tệp CSV của bạn (mass, calc, meta, dicom_info)
+# đều nằm trong cùng một thư mục này.
+BASE_PATH = "/home/neeyuhuynh/Desktop/Breast-Cancer-Detection-Mammogram-Deep-Learning-Publication"
+CSV_FILES_DIRECTORY = os.path.join(BASE_PATH, "data/CBIS-DDSM/csv")
+OUTPUT_PATH = os.path.join(BASE_PATH, "data/CBIS-DDSM")
+try:
+    # --- Bước 1: Tạo bảng tra cứu chỉ từ dicom_info.csv ---
+    print("1. Đang tạo bảng tra cứu từ dicom_info.csv...")
+    dicom_info_df = pd.read_csv(os.path.join(CSV_FILES_DIRECTORY, 'dicom_info.csv'))
+    
+    # Tạo đường dẫn ảnh tuyệt đối từ cột 'image_path'
+    dicom_info_df['full_image_path'] = dicom_info_df['image_path'].apply(lambda x: os.path.join(BASE_PATH, x))
+    
+    # Bảng tra cứu chỉ cần 2 cột: UID và đường dẫn ảnh
+    lookup_table = dicom_info_df[['SeriesInstanceUID', 'full_image_path']]
+    lookup_table.drop_duplicates(subset=['SeriesInstanceUID'], inplace=True)
+    
+    print(f"   -> Bảng tra cứu được tạo thành công với {len(lookup_table)} UID duy nhất.")
+
+    # --- Bước 2: Hàm xử lý cho từng bộ dữ liệu (training/testing) ---
+    def process_and_save(mass_csv_filename, calc_csv_filename, dataset_name):
+        print(f"\n2. Bắt đầu xử lý bộ dữ liệu '{dataset_name}'...")
+        
+        mass_df = pd.read_csv(os.path.join(CSV_FILES_DIRECTORY, mass_csv_filename))
+        calc_df = pd.read_csv(os.path.join(CSV_FILES_DIRECTORY, calc_csv_filename))
+        df_combined = pd.concat([mass_df, calc_df], ignore_index=True)
+        
+        # Trích xuất SeriesInstanceUID từ cột 'cropped image file path'
+        df_combined['SeriesInstanceUID'] = df_combined['cropped image file path'].apply(lambda x: x.split('/')[2])
+        
+        print(f"   -> Tổng số ca '{dataset_name}' ban đầu: {len(df_combined)}")
+
+        # Hợp nhất chỉ dựa trên 'SeriesInstanceUID'
+        final_df = pd.merge(df_combined, lookup_table, on='SeriesInstanceUID', how='inner')
+        
+        print(f"   -> Số lượng mẫu khớp sau khi hợp nhất: {len(final_df)}")
+
+        # Chọn và đổi tên các cột cuối cùng
+        result_df = final_df[['patient_id', 'pathology', 'full_image_path']].copy()
+        result_df.rename(columns={'full_image_path': 'image_file_path'}, inplace=True)
+        
+        result_df.drop_duplicates(inplace=True)
+
+        output_filepath = os.path.join(OUTPUT_PATH, f'{dataset_name}.csv')
+        result_df.to_csv(output_filepath, index=False)
+        
+        print(f"   -> Đã tạo thành công tệp: '{dataset_name}.csv' với {len(result_df)} mẫu.")
+        if len(result_df) == 0:
+            print(f"   CẢNH BÁO: Tệp '{dataset_name}.csv' rỗng.")
+            
+    # --- Chạy quá trình cho training và testing ---
+    process_and_save(
+        'mass_case_description_train_set.csv',
+        'calc_case_description_train_set.csv',
+        'training'
+    )
+    
+    process_and_save(
+        'mass_case_description_test_set.csv',
+        'calc_case_description_test_set.csv',
+        'testing'
+    )
+
+    print("\n--- Hoàn tất quá trình tiền xử lý ---")
+
+except Exception as e:
+    print(f"\n!!! Đã xảy ra lỗi không mong muốn: {e}")
+
+
 
 # Calc-Test
 # data_cnt: 282
