@@ -98,7 +98,7 @@ def main() -> None:
     - Hợp nhất hai nguồn thông tin trên để tạo ra các file CSV cuối cùng cho việc huấn luyện và kiểm thử.
     """
     # --- THAY ĐỔI CÁC ĐƯỜNG DẪN NÀY CHO PHÙ HỢP VỚI MÁY CỦA BẠN ---
-    base_path = '/kaggle/working/BreastMammo'
+    base_path = '/kaggle/input/breastdata'
     
     # Đường dẫn đến thư mục chứa các file CSV gốc (mass_case_description_... và calc_case_description_...)
     csv_root = os.path.join(base_path, 'data/CBIS-DDSM/csv')
