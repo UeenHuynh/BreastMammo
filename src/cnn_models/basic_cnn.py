@@ -223,48 +223,53 @@
 from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
 from tensorflow.keras import Sequential
 from tensorflow.keras.regularizers import l2 # MỚI: Import L2 regularizer
+from tensorflow.keras.initializers import HeNormal # <<< THÊM IMPORT NÀY
+
 import config # File cấu hình của bạn
 def create_basic_cnn_model(num_classes: int):
     """
-    Phiên bản CNN cân bằng: Đủ sâu để học, đủ đơn giản để không cần điều chuẩn quá mức.
+    Phiên bản CNN cân bằng, được cải tiến với phương pháp khởi tạo trọng số HeNormal.
     """
-    model = Sequential(name="Balanced_CNN")
+    model = Sequential(name="Balanced_CNN_He_Init")
+
+    # Khởi tạo HeNormal để tái sử dụng
+    he_initializer = HeNormal()
 
     # --- Block 1 ---
-    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', name="Conv1"))
+    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', 
+                     kernel_initializer=he_initializer, name="Conv1")) # <-- THÊM
     model.add(BatchNormalization(name="BN1"))
     model.add(MaxPooling2D((2, 2), name="Pool1"))
 
     # --- Block 2 ---
-    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', name="Conv2"))
+    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', 
+                     kernel_initializer=he_initializer, name="Conv2")) # <-- THÊM
     model.add(BatchNormalization(name="BN2"))
     model.add(MaxPooling2D((2, 2), name="Pool2"))
 
     # --- Block 3 ---
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="Conv3"))
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
+                     kernel_initializer=he_initializer, name="Conv3")) # <-- THÊM
     model.add(BatchNormalization(name="BN3"))
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="last_conv_layer"))
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
+                     kernel_initializer=he_initializer, name="last_conv_layer")) # <-- THÊM
     model.add(BatchNormalization(name="BN4"))
     model.add(MaxPooling2D((2, 2), name="Pool4"))
 
     # --- Lớp Phân Loại (Classifier Head) ---
     model.add(Flatten(name="Flatten"))
-    model.add(Dense(512, activation='relu', name='Dense_FC'))
-    # Chỉ giữ lại 1 lớp Dropout mạnh ở cuối là đủ
-    model.add(Dropout(0.5, seed=getattr(config, 'RANDOM_SEED', None), name="Dropout_Final"))
+    model.add(Dense(512, activation='relu', 
+                    kernel_initializer=he_initializer, name='Dense_FC')) # <-- THÊM
+    model.add(Dropout(0.5, name="Dropout_Final"))
 
-
-    # --- Lớp Output (đầu ra) - Giữ nguyên logic cũ của bạn ---
-    if num_classes == 2:
-        model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Binary'))
-    elif num_classes > 2:
-        model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Multiclass'))
+    # --- Lớp Output ---
+    # Lớp output thường dùng Glorot hoặc mặc định, nhưng HeNormal cũng không sao
+    if num_classes >= 2:
+        model.add(Dense(num_classes, activation='softmax', name='Output_Softmax'))
     else:
-        model.add(Dense(1, activation='sigmoid', kernel_initializer="random_uniform", name='Output_Sigmoid_SingleClass'))
+        model.add(Dense(1, activation='sigmoid', name='Output_Sigmoid'))
 
     if getattr(config, 'verbose_mode', False):
-        print("\n--- Highly Regularized CNN Model Summary ---")
         model.summary()
-        print("-------------------------------------------------\n")
 
     return model
