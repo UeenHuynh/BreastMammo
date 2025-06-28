@@ -226,48 +226,33 @@ from tensorflow.keras.regularizers import l2 # MỚI: Import L2 regularizer
 import config # File cấu hình của bạn
 def create_basic_cnn_model(num_classes: int):
     """
-    Hàm tạo mô hình CNN cơ bản, đã được tăng cường các kỹ thuật điều chuẩn
-    để chống overfitting một cách mạnh mẽ.
+    Phiên bản CNN cân bằng: Đủ sâu để học, đủ đơn giản để không cần điều chuẩn quá mức.
     """
-    # Đặt tên mới để phản ánh đây là phiên bản được điều chuẩn cao
-    model = Sequential(name="Highly_Regularized_CNN")
-    
-    # Định nghĩa hệ số L2. 0.001 là một giá trị khởi đầu tốt.
-    l2_reg = 0.001
+    model = Sequential(name="Balanced_CNN")
 
     # --- Block 1 ---
-    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', 
-                     kernel_regularizer=l2(l2_reg), name="Conv_Block1_Conv1"))
-    model.add(BatchNormalization(name="Conv_Block1_BN"))
-    model.add(MaxPooling2D((2, 2), name="Conv_Block1_Pool"))
-    # MỚI: Thêm Dropout ngay trong các lớp conv để điều chuẩn feature extraction
-    model.add(Dropout(0.25, name="Conv_Block1_Dropout"))
+    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', name="Conv1"))
+    model.add(BatchNormalization(name="BN1"))
+    model.add(MaxPooling2D((2, 2), name="Pool1"))
 
     # --- Block 2 ---
-    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', 
-                     kernel_regularizer=l2(l2_reg), name="Conv_Block2_Conv1"))
-    model.add(BatchNormalization(name="Conv_Block2_BN"))
-    model.add(MaxPooling2D((2, 2), name="Conv_Block2_Pool"))
-    # MỚI: Thêm Dropout
-    model.add(Dropout(0.25, name="Conv_Block2_Dropout"))
+    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', name="Conv2"))
+    model.add(BatchNormalization(name="BN2"))
+    model.add(MaxPooling2D((2, 2), name="Pool2"))
 
     # --- Block 3 ---
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
-                     kernel_regularizer=l2(l2_reg), name="Conv_Block3_Conv1"))
-    model.add(BatchNormalization(name="Conv_Block3_BN1"))
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
-                     kernel_regularizer=l2(l2_reg), name="last_conv_layer"))
-    model.add(BatchNormalization(name="Conv_Block3_BN2"))
-    model.add(MaxPooling2D((2, 2), name="Conv_Block3_Pool"))
-    # MỚI: Thêm Dropout
-    model.add(Dropout(0.25, name="Conv_Block3_Dropout"))
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="Conv3"))
+    model.add(BatchNormalization(name="BN3"))
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="last_conv_layer"))
+    model.add(BatchNormalization(name="BN4"))
+    model.add(MaxPooling2D((2, 2), name="Pool4"))
 
     # --- Lớp Phân Loại (Classifier Head) ---
     model.add(Flatten(name="Flatten"))
-    # MỚI: Giảm độ phức tạp của lớp Dense và thêm L2
-    model.add(Dense(512, activation='relu', kernel_regularizer=l2(l2_reg), name='Dense_FC'))
-    # Giữ lại Dropout mạnh ở đây
-    model.add(Dropout(0.5, seed=getattr(config, 'RANDOM_SEED', None), name="Dropout_FC_Final"))
+    model.add(Dense(512, activation='relu', name='Dense_FC'))
+    # Chỉ giữ lại 1 lớp Dropout mạnh ở cuối là đủ
+    model.add(Dropout(0.5, seed=getattr(config, 'RANDOM_SEED', None), name="Dropout_Final"))
+
 
     # --- Lớp Output (đầu ra) - Giữ nguyên logic cũ của bạn ---
     if num_classes == 2:
