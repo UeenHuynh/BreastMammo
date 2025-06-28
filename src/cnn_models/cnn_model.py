@@ -42,8 +42,23 @@ class CnnModel:
             self._model = create_vgg19_model(num_classes)
         elif model_name == "VGG-common":
             self._model = create_vgg19_model_common(num_classes)
-        elif model_name == "ResNet":
-            self._model = create_resnet50_model(num_classes)
+        # elif model_name == "ResNet":
+        #     self._model = create_resnet50_model(num_classes)
+        elif self.model_name == "ResNet":
+            # --- BẮT ĐẦU PHẦN SỬA ĐỔI ---
+
+            # 1. Tự động lấy kích thước ảnh (cao, rộng) cho ResNet từ file config của bạn
+            resnet_img_height = config.RESNET_IMG_SIZE['HEIGHT']
+            resnet_img_width = config.RESNET_IMG_SIZE['WIDTH']
+            
+            # 2. ResNet (pre-trained trên ImageNet) luôn yêu cầu 3 kênh màu (RGB).
+            #    Chúng ta sẽ định nghĩa input_shape một cách tường minh.
+            #    Dữ liệu ảnh xám của bạn sẽ được xử lý thành 3 kênh trong hàm create_resnet50_model.
+            resnet_input_shape = (resnet_img_height, resnet_img_width, 3)
+            
+            # 3. Truyền cả num_classes và input_shape vừa tạo vào hàm
+            self._model = create_resnet50_model(num_classes=num_classes, input_shape=resnet_input_shape)
+            
         elif model_name == "Inception":
             self._model = create_inceptionv3_model(num_classes)
         elif model_name == "DenseNet":
