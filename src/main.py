@@ -453,7 +453,7 @@ def main_logic(cli_args):
                 apply_elastic=cli_args.apply_elastic,
                 apply_mixup=cli_args.apply_mixup, mixup_alpha=cli_args.mixup_alpha,
                 apply_cutmix=cli_args.apply_cutmix, cutmix_alpha=cli_args.cutmix_alpha,
-                oversample=False
+                oversample=True
             )
             print(f"Shape tập train sau oversampling: {X_train_np.shape}")
         
