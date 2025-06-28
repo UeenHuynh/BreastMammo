@@ -220,56 +220,63 @@
 #     #     model.summary()
     
 #     return model
-from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
-from tensorflow.keras import Sequential
-from tensorflow.keras.regularizers import l2 # MỚI: Import L2 regularizer
-from tensorflow.keras.initializers import HeNormal # <<< THÊM IMPORT NÀY
+import tensorflow as tf
+from tensorflow.keras.initializers import HeNormal
 
-import config # File cấu hình của bạn
+def create_efficient_medical_cnn(num_classes: int):
+    """
+    Tạo một kiến trúc CNN hiệu quả với SE-Attention block.
+    
+    :param num_classes: Số lượng lớp output.
+    :return: Một model Keras đã được tạo.
+    """
+    input_layer = tf.keras.layers.Input(shape=(224, 224, 1), name="Input_Grayscale")
+    
+    # --- Block 1: Conv + SE-Attention ---
+    # Lớp tích chập đầu tiên để trích xuất đặc trưng cơ bản
+    x = tf.keras.layers.Conv2D(64, 3, padding='same',
+                              kernel_initializer=HeNormal(),
+                              bias_initializer='zeros',
+                              name="Conv1")(input_layer)
+    x = tf.keras.layers.BatchNormalization(name="BN1")(x)
+    x = tf.keras.layers.ReLU(name="ReLU1")(x)
+    
+    # SE-Attention Block: Giúp model học cách "chú ý" vào các kênh quan trọng
+    # Squeeze: Nén thông tin không gian của mỗi kênh thành một giá trị duy nhất
+    se = tf.keras.layers.GlobalAveragePooling2D(name="SE_Squeeze")(x)
+    # Excitation: Học mối quan hệ phi tuyến giữa các kênh
+    se = tf.keras.layers.Dense(64 // 16, activation='relu', kernel_initializer=HeNormal(), name="SE_Excite_Dense1")(se)
+    se = tf.keras.layers.Dense(64, activation='sigmoid', kernel_initializer=HeNormal(), name="SE_Excite_Dense2")(se)
+    se = tf.keras.layers.Reshape((1, 1, 64), name="SE_Reshape")(se)
+    # Recalibrate: Nhân lại các feature map ban đầu với trọng số chú ý đã học
+    x = tf.keras.layers.Multiply(name="SE_Recalibrate")([x, se])
+    
+    # --- Block 2: Feature Extraction & Down-sampling ---
+    # Dùng strides=2 để giảm kích thước ảnh và tăng độ sâu đặc trưng
+    x = tf.keras.layers.Conv2D(128, 3, strides=2, padding='same', name="Conv2_Downsample")(x)
+    x = tf.keras.layers.BatchNormalization(name="BN2")(x)
+    x = tf.keras.layers.ReLU(name="ReLU2")(x)
+    x = tf.keras.layers.Dropout(0.3, name="Dropout_Conv")(x)
+    
+    # --- Classifier Head ---
+    x = tf.keras.layers.GlobalAveragePooling2D(name="GlobalPool")(x)
+    x = tf.keras.layers.Dense(128, activation='relu', kernel_initializer=HeNormal(), name="Dense1")(x)
+    x = tf.keras.layers.Dropout(0.5, name="Dropout_Final")(x)
+    
+    # Lớp Output
+    if num_classes >= 2:
+        output_layer = tf.keras.layers.Dense(num_classes, activation='softmax', name="Output_Softmax")(x)
+    else:
+        output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name="Output_Sigmoid")(x)
+    
+    model = tf.keras.Model(inputs=input_layer, outputs=output_layer, name="Efficient_Medical_CNN")
+    model.summary()
+    return model
+
 def create_basic_cnn_model(num_classes: int):
     """
-    Phiên bản CNN cân bằng, được cải tiến với phương pháp khởi tạo trọng số HeNormal.
+    Hàm này được giữ lại để tương thích với CnnModel,
+    nó sẽ gọi đến kiến trúc mới và hiệu quả hơn của bạn.
     """
-    model = Sequential(name="Balanced_CNN_He_Init")
-
-    # Khởi tạo HeNormal để tái sử dụng
-    he_initializer = HeNormal()
-
-    # --- Block 1 ---
-    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', 
-                     kernel_initializer=he_initializer, name="Conv1")) # <-- THÊM
-    model.add(BatchNormalization(name="BN1"))
-    model.add(MaxPooling2D((2, 2), name="Pool1"))
-
-    # --- Block 2 ---
-    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', 
-                     kernel_initializer=he_initializer, name="Conv2")) # <-- THÊM
-    model.add(BatchNormalization(name="BN2"))
-    model.add(MaxPooling2D((2, 2), name="Pool2"))
-
-    # --- Block 3 ---
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
-                     kernel_initializer=he_initializer, name="Conv3")) # <-- THÊM
-    model.add(BatchNormalization(name="BN3"))
-    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', 
-                     kernel_initializer=he_initializer, name="last_conv_layer")) # <-- THÊM
-    model.add(BatchNormalization(name="BN4"))
-    model.add(MaxPooling2D((2, 2), name="Pool4"))
-
-    # --- Lớp Phân Loại (Classifier Head) ---
-    model.add(Flatten(name="Flatten"))
-    model.add(Dense(512, activation='relu', 
-                    kernel_initializer=he_initializer, name='Dense_FC')) # <-- THÊM
-    model.add(Dropout(0.5, name="Dropout_Final"))
-
-    # --- Lớp Output ---
-    # Lớp output thường dùng Glorot hoặc mặc định, nhưng HeNormal cũng không sao
-    if num_classes >= 2:
-        model.add(Dense(num_classes, activation='softmax', name='Output_Softmax'))
-    else:
-        model.add(Dense(1, activation='sigmoid', name='Output_Sigmoid'))
-
-    if getattr(config, 'verbose_mode', False):
-        model.summary()
-
-    return model
+    print("[INFO] Creating model using new 'Efficient_Medical_CNN' architecture.")
+    return create_efficient_medical_cnn(num_classes)
