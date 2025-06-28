@@ -220,10 +220,10 @@
 #     #     model.summary()
     
 #     return model
-from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D
+from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
 from tensorflow.keras import Sequential
+from tensorflow.keras.regularizers import l2 # MỚI: Import L2 regularizer
 import config # File cấu hình của bạn
-
 def create_basic_cnn_model(num_classes: int):
     """
     Hàm tạo mô hình CNN cơ bản, đã được tăng cường các kỹ thuật điều chuẩn
