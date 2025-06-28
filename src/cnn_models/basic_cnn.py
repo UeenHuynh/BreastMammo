@@ -220,50 +220,106 @@
 #     #     model.summary()
     
 #     return model
-from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D
+# from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D
+# from tensorflow.keras import Sequential
+# import config # File cấu hình của bạn
+
+# def create_basic_cnn_model(num_classes: int):
+#     """
+#     Hàm để tạo một mô hình CNN cơ bản, đã được điều chỉnh lớp output
+#     cho phù hợp với CategoricalCrossentropy khi num_classes = 2.
+
+#     :param num_classes: Số lượng lớp (nhãn) cho bài toán phân loại.
+#     :return: Một mô hình CNN cơ bản đã được tạo.
+#     """
+#     model = Sequential(name="Basic_CNN_Adjusted")
+
+#     # Các lớp Convolutional (tích chập) và Pooling (gộp)
+#     model.add(Conv2D(64, (5, 5), activation='relu', name="Conv1"))
+#     model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool1"))
+#     model.add(Conv2D(32, (5, 5), activation='relu', padding='same', name="Conv2"))
+#     model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool2"))
+#     model.add(Flatten(name="Flatten"))
+
+#     # Lớp Dropout
+#     model.add(Dropout(0.5, seed=getattr(config, 'RANDOM_SEED', None), name="Dropout_FC"))
+
+#     # Lớp Fully Connected (Dense)
+#     model.add(Dense(1024, activation='relu', name='Dense_FC'))
+
+#     # Lớp Output (đầu ra)
+#     if num_classes == 2:
+#         # Phân loại nhị phân: SỬ DỤNG 2 nơ-ron và hàm softmax
+#         # để tương thích với CategoricalCrossentropy trong CnnModel.
+#         model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Binary'))
+#     elif num_classes > 2:
+#         # Phân loại đa lớp (>2 lớp): num_classes nơ-ron, hàm softmax
+#         model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Multiclass'))
+#     else: # Trường hợp num_classes = 1 (hoặc lỗi)
+#         # Vẫn giữ 1 nơ-ron sigmoid cho trường hợp này, mặc dù ít khả năng xảy ra
+#         # nếu num_classes được xác định đúng từ đầu.
+#         # CnnModel.compile_model cũng có nhánh xử lý cho num_classes = 1.
+#         model.add(Dense(1, activation='sigmoid', kernel_initializer="random_uniform", name='Output_Sigmoid_SingleClass'))
+
+
+#     if getattr(config, 'verbose_mode', False):
+#         print("\n--- Basic CNN (Adjusted Output) Model Summary ---")
+#         model.summary()
+#         print("-------------------------------------------------\n")
+
+#     return model
+
+from tensorflow.keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, BatchNormalization
 from tensorflow.keras import Sequential
 import config # File cấu hình của bạn
 
 def create_basic_cnn_model(num_classes: int):
     """
-    Hàm để tạo một mô hình CNN cơ bản, đã được điều chỉnh lớp output
-    cho phù hợp với CategoricalCrossentropy khi num_classes = 2.
+    Hàm để tạo một mô hình CNN cơ bản, đã được cải tiến về kiến trúc
+    để học các đặc trưng hiệu quả hơn trong khi vẫn giữ cấu trúc Sequential.
 
     :param num_classes: Số lượng lớp (nhãn) cho bài toán phân loại.
-    :return: Một mô hình CNN cơ bản đã được tạo.
+    :return: Một mô hình CNN cơ bản đã được cải tiến.
     """
-    model = Sequential(name="Basic_CNN_Adjusted")
+    # Đổi tên model để phản ánh sự nâng cấp
+    model = Sequential(name="Improved_Basic_CNN")
 
-    # Các lớp Convolutional (tích chập) và Pooling (gộp)
-    model.add(Conv2D(64, (5, 5), activation='relu', name="Conv1"))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool1"))
-    model.add(Conv2D(32, (5, 5), activation='relu', padding='same', name="Conv2"))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2), name="Pool2"))
+    # --- Block 1: Tăng số bộ lọc, thêm Batch Normalization, dùng kernel 3x3 ---
+    # Kernel 3x3 là tiêu chuẩn hiện đại, hiệu quả hơn 5x5.
+    model.add(Conv2D(32, (3, 3), activation='relu', padding='same', name="Conv_Block1_Conv1"))
+    model.add(BatchNormalization(name="Conv_Block1_BN"))
+    model.add(MaxPooling2D((2, 2), name="Conv_Block1_Pool"))
+
+    # --- Block 2: Tăng độ sâu và số bộ lọc ---
+    model.add(Conv2D(64, (3, 3), activation='relu', padding='same', name="Conv_Block2_Conv1"))
+    model.add(BatchNormalization(name="Conv_Block2_BN"))
+    model.add(MaxPooling2D((2, 2), name="Conv_Block2_Pool"))
+
+    # --- Block 3: Tầng sâu nhất để học đặc trưng phức tạp ---
+    # Đây là tầng quan trọng nhất để Grad-CAM hoạt động tốt.
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="Conv_Block3_Conv1"))
+    model.add(BatchNormalization(name="Conv_Block3_BN1"))
+    # Đặt tên cho lớp Conv cuối cùng để dễ dàng gọi trong Grad-CAM
+    model.add(Conv2D(128, (3, 3), activation='relu', padding='same', name="last_conv_layer"))
+    model.add(BatchNormalization(name="Conv_Block3_BN2"))
+    model.add(MaxPooling2D((2, 2), name="Conv_Block3_Pool"))
+
+    # --- CÁC LỚP PHÂN LOẠI: Giữ nguyên hoàn toàn như cũ để tránh conflict ---
     model.add(Flatten(name="Flatten"))
-
-    # Lớp Dropout
     model.add(Dropout(0.5, seed=getattr(config, 'RANDOM_SEED', None), name="Dropout_FC"))
-
-    # Lớp Fully Connected (Dense)
     model.add(Dense(1024, activation='relu', name='Dense_FC'))
 
-    # Lớp Output (đầu ra)
+    # Lớp Output (đầu ra) - Giữ nguyên logic cũ của bạn
     if num_classes == 2:
-        # Phân loại nhị phân: SỬ DỤNG 2 nơ-ron và hàm softmax
-        # để tương thích với CategoricalCrossentropy trong CnnModel.
         model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Binary'))
     elif num_classes > 2:
-        # Phân loại đa lớp (>2 lớp): num_classes nơ-ron, hàm softmax
         model.add(Dense(num_classes, activation='softmax', kernel_initializer="random_uniform", name='Output_Softmax_Multiclass'))
-    else: # Trường hợp num_classes = 1 (hoặc lỗi)
-        # Vẫn giữ 1 nơ-ron sigmoid cho trường hợp này, mặc dù ít khả năng xảy ra
-        # nếu num_classes được xác định đúng từ đầu.
-        # CnnModel.compile_model cũng có nhánh xử lý cho num_classes = 1.
+    else:
         model.add(Dense(1, activation='sigmoid', kernel_initializer="random_uniform", name='Output_Sigmoid_SingleClass'))
 
-
+    # Giữ nguyên phần in summary nếu có
     if getattr(config, 'verbose_mode', False):
-        print("\n--- Basic CNN (Adjusted Output) Model Summary ---")
+        print("\n--- Improved Basic CNN Model Summary ---")
         model.summary()
         print("-------------------------------------------------\n")
 
