@@ -2,7 +2,7 @@
 # # from tensorflow.python.keras import Sequential
 # # from tensorflow.python.keras.layers import Conv2D, MaxPooling2D
 # import tensorflow as tf
-# import config
+import config
 # from tensorflow.keras.layers import LeakyReLU
 # from tensorflow.keras import regularizers
 # lambda_val = 0.0001 # Start with a small value like 0.001 or 0.0001
