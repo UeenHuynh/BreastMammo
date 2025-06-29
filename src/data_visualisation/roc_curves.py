@@ -81,7 +81,8 @@ def plot_roc_curve_binary(y_true_one_hot: np.ndarray, y_pred_scores: np.ndarray)
     # Plot.
     plt.figure(figsize=(10, 8)) # Tăng figsize
     plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = %0.2f)' % roc_auc)
-    plt.plot([0, 1], [0, 1], 'k--', color='navy', lw=2) 
+    plt.plot([0, 1], [0, 1], '--', color='navy', lw=2)
+#    plt.plot([0, 1], [0, 1], 'k--', color='navy', lw=2) 
 
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
