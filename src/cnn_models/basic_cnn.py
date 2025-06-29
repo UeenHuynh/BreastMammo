@@ -270,7 +270,10 @@ def create_efficient_medical_cnn(num_classes: int):
         output_layer = tf.keras.layers.Dense(1, activation='sigmoid', name="Output_Sigmoid")(x)
     
     model = tf.keras.Model(inputs=input_layer, outputs=output_layer, name="Efficient_Medical_CNN")
-    model.summary()
+    if getattr(config, 'verbose_mode', False):
+        print("\n--- Basic CNN (Adjusted Output) Model Summary ---")
+        model.summary()
+        print("-------------------------------------------------\n")    
     return model
 
 def create_basic_cnn_model(num_classes: int):
