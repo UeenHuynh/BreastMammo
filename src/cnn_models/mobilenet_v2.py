@@ -607,12 +607,12 @@ ssl._create_default_https_context = ssl._create_unverified_context
             
 #     return final_model
 
-# file: mobilenet_v2.py
+# file: /kaggle/working/BreastMammo/src/cnn_models/mobilenet_v2.py
 
 import ssl
 from tensorflow.keras.models import Model
 from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, Dropout, Input, GlobalAveragePooling2D
+from tensorflow.keras.layers import Dense, Dropout, Input, GlobalAveragePooling2D, Concatenate
 from tensorflow.keras import regularizers
 
 import config
@@ -622,56 +622,51 @@ ssl._create_default_https_context = ssl._create_unverified_context
 
 def create_mobilenet_model(num_classes: int):
     """
-    Tạo mô hình MobileNetV2 với đầu vào 3 kênh tiêu chuẩn.
-    Việc chuyển đổi từ ảnh xám sang 3 kênh nên được xử lý ở pipeline dữ liệu.
+    Tạo mô hình MobileNetV2 một cách an toàn và rõ ràng.
+    Mô hình này sẽ nhận đầu vào 1 kênh và tự động chuyển đổi sang 3 kênh bên trong.
     """
-    # Lấy kích thước ảnh từ config một cách an toàn
     img_height = getattr(config, 'MOBILE_NET_IMG_SIZE', {}).get('HEIGHT', 224)
     img_width = getattr(config, 'MOBILE_NET_IMG_SIZE', {}).get('WIDTH', 224)
     
-    # 1. Đầu vào của mô hình BẮT BUỘC là ảnh 3 kênh.
-    input_tensor = Input(shape=(img_height, img_width, 3), name="Input_RGB_MobileNet")
+    # 1. Định nghĩa đầu vào của toàn bộ mô hình là ảnh xám 1 kênh.
+    main_input = Input(shape=(img_height, img_width, 1), name="Grayscale_Input")
 
-    if config.verbose_mode:
-        print(f"    [MobileNet Create] Model input shape is defined as: {input_tensor.shape}")
-
-    # 2. Tạo mô hình MobileNetV2 gốc với đầu vào 3 kênh.
+    # 2. Nhân đôi kênh ảnh xám thành 3 kênh.
+    # Tất cả các bước sau sẽ được xây dựng trên tensor 3 kênh này.
+    x = Concatenate(name='Replicate_To_3_Channels')([main_input, main_input, main_input])
+    
+    # 3. Tạo mô hình MobileNetV2 gốc.
+    # Quan trọng: KHÔNG dùng `input_tensor`. Thay vào đó, khai báo `input_shape` cho nó.
     base_model = MobileNetV2(
-        input_tensor=input_tensor,
+        input_shape=(img_height, img_width, 3),
         include_top=False,
         weights='imagenet',
-        pooling='avg' # Sử dụng Global Average Pooling ngay trong base model
+        pooling='avg' # Tích hợp GlobalAveragePooling vào base model
     )
 
-    # 3. Đặt các lớp của mô hình gốc là có thể huấn luyện (cho fine-tuning)
-    base_model.trainable = True
+    # 4. Gọi mô hình base như một lớp (layer) và đưa tensor 3 kênh `x` vào.
+    # Đây là bước kết nối đồ thị tính toán một cách chính xác.
+    x = base_model(x)
 
-    # 4. Thêm các lớp phân loại tùy chỉnh (Head)
-    # Output của base_model khi có pooling='avg' là (None, 1280)
-    x = base_model.output
-    
-    # Sử dụng các giá trị từ config một cách an toàn
+    # 5. Thêm các lớp phân loại tùy chỉnh (Head)
     random_seed_val = getattr(config, 'RANDOM_SEED', None)
     
-    # Thêm các lớp Dense và Dropout để giảm overfitting
     x = Dropout(0.4, seed=random_seed_val, name="MobileNet_Dropout_1")(x)
     x = Dense(512, activation='relu', kernel_regularizer=regularizers.l2(0.0005), name="MobileNet_Dense_1")(x)
     x = Dropout(0.3, seed=random_seed_val, name="MobileNet_Dropout_2")(x)
     x = Dense(32, activation='relu', name="MobileNet_Dense_2")(x)
 
-    # 5. Lớp output cuối cùng
-    # Logic này đảm bảo đầu ra luôn là softmax cho bài toán phân loại >= 2 lớp
+    # 6. Lớp output cuối cùng
     if num_classes >= 2:
         outputs = Dense(num_classes, activation='softmax', name='MobileNet_Output')(x)
     else:
-        # Trường hợp này ít xảy ra, nhưng để phòng ngừa
-        raise ValueError(f"num_classes must be >= 2 for softmax classification, but got {num_classes}")
+        raise ValueError(f"num_classes must be >= 2, but got {num_classes}")
 
-    # 6. Tạo mô hình cuối cùng
-    model = Model(inputs=input_tensor, outputs=outputs, name='MobileNetV2_Custom')
+    # 7. Tạo mô hình cuối cùng. Đầu vào là `main_input` (1 kênh), đầu ra là `outputs`.
+    model = Model(inputs=main_input, outputs=outputs, name='MobileNetV2_Custom_Fixed')
 
     if getattr(config, 'verbose_mode', False):
-        print(f"--- MobileNetV2_Custom ({config.dataset}) Summary ---")
+        print(f"--- MobileNetV2_Custom_Fixed Summary ---")
         model.summary(line_length=120)
 
     return model
