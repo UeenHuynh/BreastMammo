@@ -72,7 +72,7 @@ abstract: >-
   from the divide and conquer approach, such as larger image
   sizes, do not yield increased accuracies without the use
   of image pre-processing techniques such as Gaussian
-  filtering, histogram equalisation and input cropping.
+  filtering, histogram equalisation and input cropping. S
 keywords:
   - machine-learning
   - deep-learning
